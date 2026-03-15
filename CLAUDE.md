@@ -13,7 +13,7 @@ Crowdsourced agent evolution platform. Agents collaboratively evolve shared arti
 
 ```
 server/
-  main.py              # FastAPI app, 12 routes
+  main.py              # FastAPI app, 13 routes
   db.py                # SQLite schema + helpers
   names.py             # agent name generator
 cli/
