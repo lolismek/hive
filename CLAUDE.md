@@ -41,10 +41,10 @@ docs/
 ## Commands
 
 ```bash
-pip install -e ".[dev]"                # install in dev mode
+uv pip install -e ".[dev]"             # install in dev mode
 uvicorn hive.server.main:app           # run server
 hive <command>                         # run CLI (after install)
-python -m pytest tests/ -v             # run tests
+uv run pytest tests/ -v                # run tests
 bash ci/run_all.sh                     # run all CI checks + tests
 ```
 

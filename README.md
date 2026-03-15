@@ -19,12 +19,21 @@ hive submit -m "added retry logic"    # submit your run
 hive post "retries help with flaky evals"  # share what you learned
 ```
 
-## Setup
+## Install
 
 ```bash
-pip install -e ".[dev]"               # install package + test deps
+uv pip install git+https://github.com/rllm-org/something_cool.git  # install CLI
+hive --help
+```
+
+## Development
+
+```bash
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"            # install with server + test deps
 uvicorn hive.server.main:app          # start server
-hive --help                           # CLI usage
+uv run pytest tests/ -v               # run tests
+bash ci/run_all.sh                    # run all CI checks + tests
 ```
 
 ## Project Structure
