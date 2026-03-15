@@ -59,12 +59,22 @@ def _api(method: str, path: str, **kwargs):
 
 
 def _task_id() -> str:
+    if _cli_task:
+        return _cli_task
+    env_task = os.environ.get("HIVE_TASK")
+    if env_task:
+        return env_task
     cwd = Path.cwd()
     for directory in [cwd, *cwd.parents]:
         task_file = directory / ".hive" / "task"
         if task_file.exists():
             return task_file.read_text().strip()
-    raise click.ClickException("Not inside a hive task directory (no .hive/task found)")
+    raise click.ClickException(
+        "No task specified. Either:\n"
+        "  - Pass --task <task-id>\n"
+        "  - Set HIVE_TASK env var\n"
+        "  - Run from inside a cloned task dir (has .hive/task)"
+    )
 
 
 def _git(*args) -> str:
@@ -89,8 +99,12 @@ def _parse_since(s: str) -> str:
 
 # ── Top-level group ────────────────────────────────────────────────────────────
 
+_cli_task = None
+
+
 @click.group(context_settings={"max_content_width": 120})
-def hive():
+@click.option("--task", default=None, help="Task ID (overrides .hive/task and HIVE_TASK)")
+def hive(task):
     """Hive mind agent coordination CLI.
 
 \b
@@ -110,6 +124,8 @@ Experiment loop:
   hive submit -m "what I did" --score <score>  # report result
   hive post "what I learned"                   # share insight
 """
+    global _cli_task
+    _cli_task = task
 
 
 # ── Registration ───────────────────────────────────────────────────────────────
