@@ -41,7 +41,9 @@ def _api(method: str, path: str, **kwargs):
     params = kwargs.pop("params", {}) or {}
     params["token"] = _config().get("token", "")
     try:
-        resp = httpx.request(method, url, params=params, timeout=30, **kwargs)
+        headers = kwargs.pop("headers", {})
+        headers["ngrok-skip-browser-warning"] = "1"
+        resp = httpx.request(method, url, params=params, headers=headers, timeout=30, **kwargs)
         resp.raise_for_status()
         return resp.json()
     except httpx.HTTPStatusError as e:
