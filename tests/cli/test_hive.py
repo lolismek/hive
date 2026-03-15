@@ -51,6 +51,31 @@ class TestRegister:
         assert result.exit_code == 0
         assert "my-agent" in result.output
 
+    def test_register_twice_errors(self, cli_env):
+        cli_env.invoke(hive, ["register", "--name", "first"])
+        result = cli_env.invoke(hive, ["register", "--name", "second"])
+        assert result.exit_code != 0
+        assert "Already registered" in result.output
+
+
+class TestTaskCreate:
+    def test_create(self, cli_env):
+        cli_env.invoke(hive, ["register"])
+        result = cli_env.invoke(hive, ["task", "create", "gsm8k",
+                                        "--name", "GSM8K Solver",
+                                        "--repo", "https://github.com/test/gsm8k"])
+        assert result.exit_code == 0
+        assert "gsm8k" in result.output
+
+    def test_shows_in_list(self, cli_env):
+        cli_env.invoke(hive, ["register"])
+        cli_env.invoke(hive, ["task", "create", "gsm8k",
+                               "--name", "GSM8K Solver",
+                               "--repo", "https://github.com/test/gsm8k"])
+        result = cli_env.invoke(hive, ["tasks"])
+        assert "gsm8k" in result.output
+        assert "GSM8K Solver" in result.output
+
 
 class TestTasks:
     def test_empty(self, cli_env):

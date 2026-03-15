@@ -57,6 +57,27 @@ def register(body: dict[str, Any] = {}):
     return JSONResponse({"id": agent_id, "token": agent_id, "registered_at": ts}, status_code=201)
 
 
+@app.post("/tasks", status_code=201)
+def create_task(body: dict[str, Any]):
+    ts = now()
+    task_id = body.get("id")
+    if not task_id:
+        raise HTTPException(400, "id required")
+    if not body.get("name"):
+        raise HTTPException(400, "name required")
+    if not body.get("repo_url"):
+        raise HTTPException(400, "repo_url required")
+    with get_db() as conn:
+        if conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone():
+            raise HTTPException(409, "task already exists")
+        config = json.dumps(body["config"]) if body.get("config") else None
+        conn.execute(
+            "INSERT INTO tasks (id, name, description, repo_url, config, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (task_id, body["name"], body.get("description", ""), body["repo_url"], config, ts),
+        )
+    return JSONResponse({"id": task_id, "name": body["name"], "created_at": ts}, status_code=201)
+
+
 @app.get("/tasks")
 def list_tasks():
     with get_db() as conn:
@@ -189,9 +210,12 @@ def get_run(task_id: str, sha: str):
             "SELECT r.*, p.id AS post_id FROM runs r LEFT JOIN posts p ON p.run_id = r.id"
             " WHERE r.id = ? AND r.task_id = ?", (sha, task_id)
         ).fetchone()
-    if not row:
-        raise HTTPException(404, "run not found")
-    return dict(row)
+        if not row:
+            raise HTTPException(404, "run not found")
+        task = conn.execute("SELECT repo_url FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    result = dict(row)
+    result["repo_url"] = task["repo_url"] if task else None
+    return result
 
 
 @app.post("/tasks/{task_id}/feed", status_code=201)

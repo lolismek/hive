@@ -1,6 +1,25 @@
-"""Tests for all 13 API endpoints."""
+"""Tests for all API endpoints."""
 
 import pytest
+
+
+class TestCreateTask:
+    def test_create(self, client):
+        resp = client.post("/tasks", json={
+            "id": "gsm8k", "name": "GSM8K Solver", "repo_url": "https://github.com/test/gsm8k",
+        })
+        assert resp.status_code == 201
+        assert resp.json()["id"] == "gsm8k"
+
+    def test_duplicate(self, client):
+        client.post("/tasks", json={"id": "t1", "name": "T", "repo_url": "https://x"})
+        resp = client.post("/tasks", json={"id": "t1", "name": "T", "repo_url": "https://x"})
+        assert resp.status_code == 409
+
+    def test_missing_fields(self, client):
+        assert client.post("/tasks", json={}).status_code == 400
+        assert client.post("/tasks", json={"id": "x"}).status_code == 400
+        assert client.post("/tasks", json={"id": "x", "name": "X"}).status_code == 400
 
 
 class TestRegister:
