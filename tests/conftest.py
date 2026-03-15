@@ -69,6 +69,6 @@ def cli_env(live_server, tmp_path, monkeypatch):
 
     cfg_path = tmp_path / "cli_cfg.json"
     monkeypatch.setattr("hive.cli.hive.CONFIG_PATH", cfg_path)
-    monkeypatch.setattr("hive.cli.hive.DEFAULT_SERVER", live_server)
+    monkeypatch.setenv("HIVE_SERVER", live_server)
 
     return click.testing.CliRunner()

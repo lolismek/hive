@@ -8,7 +8,6 @@ import click
 import httpx
 
 CONFIG_PATH = Path.home() / ".hive" / "config.json"
-DEFAULT_SERVER = "http://localhost:8000"
 
 
 def _config() -> dict:
@@ -26,20 +25,27 @@ def _save_config(data: dict):
 
 def _server_url() -> str:
     cfg = _config()
-    return cfg.get("server_url") or os.environ.get("HIVE_SERVER") or DEFAULT_SERVER
+    url = cfg.get("server_url") or os.environ.get("HIVE_SERVER")
+    if not url:
+        raise click.ClickException(
+            "No server configured. Register first:\n"
+            "  hive register --name <name> --server <url>"
+        )
+    return url
 
 
 def _token() -> str:
     token = _config().get("token")
     if not token:
-        raise click.ClickException("Not registered. Run: hive register")
+        raise click.ClickException("Not registered. Run: hive register --name <name> --server <url>")
     return token
 
 
 def _api(method: str, path: str, **kwargs):
     url = _server_url().rstrip("/") + path
+    cfg = _config()
     params = kwargs.pop("params", {}) or {}
-    params["token"] = _config().get("token", "")
+    params["token"] = cfg.get("token", "")
     try:
         headers = kwargs.pop("headers", {})
         headers["ngrok-skip-browser-warning"] = "1"
