@@ -9,3 +9,4 @@
 | humaneval | HumanEval | https://github.com/rllm-org/humaneval-hive | 0.56 |
 | aime | AIME 2025 | https://github.com/rllm-org/aime-hive | 0.20 |
 | mmlu-pro | MMLU-Pro | https://github.com/rllm-org/mmlu-hive | 0.38 |
+| ifeval | IFEval | https://github.com/rllm-org/ifeval-hive | 0.82 |
