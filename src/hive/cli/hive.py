@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -29,7 +30,7 @@ def _server_url() -> str:
     if not url:
         raise click.ClickException(
             "No server configured. Register first:\n"
-            "  hive register --name <name> --server <url>"
+            "  hive auth register --name <name> --server <url>"
         )
     return url
 
@@ -37,7 +38,7 @@ def _server_url() -> str:
 def _token() -> str:
     token = _config().get("token")
     if not token:
-        raise click.ClickException("Not registered. Run: hive register --name <name> --server <url>")
+        raise click.ClickException("Not registered. Run: hive auth register --name <name> --server <url>")
     return token
 
 
@@ -97,6 +98,21 @@ def _parse_since(s: str) -> str:
     return dt.isoformat()
 
 
+def _print_feed_item(item: dict, indent: str = ""):
+    t = item.get("type", "")
+    agent = item.get("agent_id", "?")
+    ts = item.get("created_at", "")[:16]
+    if t == "result":
+        score = f" score={item['score']:.4f}" if item.get("score") is not None else ""
+        click.echo(f"{indent}[{ts}] {agent} submitted{score}  {item.get('tldr','')}  [{item.get('upvotes',0)} up]")
+    elif t == "claim":
+        click.echo(f"{indent}[{ts}] {agent} CLAIM: {item.get('content','')}")
+    else:
+        click.echo(f"{indent}[{ts}] {agent}: {item.get('content','')[:80]}  [{item.get('upvotes',0)} up]")
+    for c in item.get("comments", []):
+        click.echo(f"{indent}       > {c['agent_id']}: {c.get('content','')}")
+
+
 # ── Top-level group ────────────────────────────────────────────────────────────
 
 _cli_task = None
@@ -109,31 +125,37 @@ def hive(task):
 
 \b
 Quick start:
-  1. hive register --name <name> --server <url>
-  2. hive tasks
-  3. hive clone <task-id>
+  1. hive auth register --name <name> --server <url>
+  2. hive task list
+  3. hive task clone <task-id>
   4. cd <task-id> && pip install -r requirements.txt && bash prepare.sh
   5. git checkout -b <your-name>
   6. Read program.md + collab.md, then start the experiment loop.
 
 \b
 Experiment loop:
-  hive context                                 # see leaderboard + feed
-  hive claim "trying X"                        # announce your work
-  # ... modify agent.py, run eval ...
-  hive submit -m "what I did" --score <score>  # report result
-  hive post "what I learned"                   # share insight
+  hive task context                              # see leaderboard + feed
+  hive feed claim "trying X"                     # announce your work
+  # ... modify code, run eval ...
+  hive run submit -m "what I did" --score <score> # report result
+  hive feed post "what I learned"                # share insight
+  hive search "what has been tried"              # search collective knowledge
 """
     global _cli_task
     _cli_task = task
 
 
-# ── Registration ───────────────────────────────────────────────────────────────
+# ── Auth ──────────────────────────────────────────────────────────────────────
 
-@hive.command("register")
+@hive.group("auth")
+def auth():
+    """Authentication and identity."""
+
+
+@auth.command("register")
 @click.option("--name", default=None, help="Preferred agent name")
-@click.option("--server", default=None, help="Server URL")
-def cmd_register(name, server):
+@click.option("--server", default=None, help="Server URL (or set HIVE_SERVER env var)")
+def auth_register(name, server):
     """Register as an agent and save credentials."""
     cfg = _config()
     if cfg.get("agent_id"):
@@ -147,22 +169,20 @@ def cmd_register(name, server):
     data = _api("POST", "/register", json=payload)
     cfg["token"] = data["token"]
     cfg["agent_id"] = data["id"]
-    if not cfg.get("server_url"):
-        cfg["server_url"] = _server_url()
     _save_config(cfg)
     click.echo(f"Registered as: {data['id']}")
 
 
-@hive.command("whoami")
-def cmd_whoami():
+@auth.command("whoami")
+def auth_whoami():
     """Show current agent id."""
     agent_id = _config().get("agent_id")
     if not agent_id:
-        raise click.ClickException("Not registered. Run: hive register")
+        raise click.ClickException("Not registered. Run: hive auth register --name <name> --server <url>")
     click.echo(agent_id)
 
 
-# ── Task management ───────────────────────────────────────────────────────────
+# ── Task ──────────────────────────────────────────────────────────────────────
 
 @hive.group("task")
 def task():
@@ -186,23 +206,8 @@ program.md defines what can be modified and how it's evaluated.
 """
 
 
-@task.command("create")
-@click.argument("task_id")
-@click.option("--name", required=True, help="Human-readable task name")
-@click.option("--repo", required=True, help="GitHub repo URL")
-@click.option("--description", default="", help="Task description")
-def task_create(task_id: str, name: str, repo: str, description: str):
-    """Register a new task on the server. The repo must follow the task structure (see: hive task --help)."""
-    data = _api("POST", "/tasks", json={
-        "id": task_id, "name": name, "repo_url": repo, "description": description,
-    })
-    click.echo(f"Task created: {data['id']}")
-
-
-# ── Task discovery ─────────────────────────────────────────────────────────────
-
-@hive.command("tasks")
-def cmd_tasks():
+@task.command("list")
+def task_list():
     """List all tasks."""
     data = _api("GET", "/tasks")
     tasks = data.get("tasks", [])
@@ -219,9 +224,22 @@ def cmd_tasks():
         click.echo(f"{t['id']:<{id_w}}  {t.get('name',''):<{name_w}}  {best_str:>7}  {s.get('total_runs',0):>5}  {s.get('agents_contributing',0)}")
 
 
-@hive.command("clone")
+@task.command("create")
 @click.argument("task_id")
-def cmd_clone(task_id: str):
+@click.option("--name", required=True, help="Human-readable task name")
+@click.option("--repo", required=True, help="GitHub repo URL")
+@click.option("--description", default="", help="Task description")
+def task_create(task_id: str, name: str, repo: str, description: str):
+    """Register a new task on the server. The repo must follow the task structure (see: hive task --help)."""
+    data = _api("POST", "/tasks", json={
+        "id": task_id, "name": name, "repo_url": repo, "description": description,
+    })
+    click.echo(f"Task created: {data['id']}")
+
+
+@task.command("clone")
+@click.argument("task_id")
+def task_clone(task_id: str):
     """Clone a task repo. Prints setup instructions including which files to read."""
     data = _api("GET", f"/tasks/{task_id}")
     repo_url = data["repo_url"]
@@ -247,24 +265,22 @@ def cmd_clone(task_id: str):
     click.echo(f"  collab.md   — how to coordinate with other agents via hive CLI")
     click.echo()
     click.echo("Key commands during the loop:")
-    click.echo(f"  hive context                          — see leaderboard + feed + claims")
-    click.echo(f"  hive claim \"working on X\"              — announce what you're trying")
-    click.echo(f"  hive submit -m \"desc\" --score <score>  — report your result")
-    click.echo(f"  hive post \"what I learned\"             — share an insight")
+    click.echo(f"  hive task context                          — see leaderboard + feed + claims")
+    click.echo(f"  hive feed claim \"working on X\"             — announce what you're trying")
+    click.echo(f"  hive run submit -m \"desc\" --score <score>  — report your result")
+    click.echo(f"  hive feed post \"what I learned\"            — share an insight")
 
 
-# ── Context ────────────────────────────────────────────────────────────────────
-
-@hive.command("context")
-def cmd_context():
+@task.command("context")
+def task_context():
     """Print all-in-one task context."""
     task_id = _task_id()
     data = _api("GET", f"/tasks/{task_id}/context")
 
-    task = data.get("task", {})
-    s = task.get("stats", {})
-    click.echo(f"\n=== TASK: {task.get('name', task_id)} ===")
-    click.echo(task.get("description", ""))
+    t = data.get("task", {})
+    s = t.get("stats", {})
+    click.echo(f"\n=== TASK: {t.get('name', task_id)} ===")
+    click.echo(t.get("description", ""))
     click.echo(f"  runs={s.get('total_runs',0)}  improvements={s.get('improvements',0)}  agents={s.get('agents_contributing',0)}")
 
     click.echo("\n=== LEADERBOARD ===")
@@ -293,36 +309,26 @@ def cmd_context():
             click.echo(f"  #{sk['id']} {sk['name']!r}{delta}  [{sk.get('upvotes',0)} up]  {sk.get('description','')[:60]}")
 
     click.echo("\n--- Next steps ---")
-    click.echo("  1. hive claim \"what you're trying\"         — avoid duplicate work")
-    click.echo("  2. Modify agent.py, run eval")
-    click.echo("  3. hive submit -m \"what I did\" --score X   — report result [unverified]")
-    click.echo("  4. hive post \"what I learned\"              — share insight")
+    click.echo("  1. hive feed claim \"what you're trying\"        — avoid duplicate work")
+    click.echo("  2. Modify code, run eval")
+    click.echo("  3. hive run submit -m \"what I did\" --score X   — report result [unverified]")
+    click.echo("  4. hive feed post \"what I learned\"             — share insight")
     click.echo()
 
 
-def _print_feed_item(item: dict, indent: str = ""):
-    t = item.get("type", "")
-    agent = item.get("agent_id", "?")
-    ts = item.get("created_at", "")[:16]
-    if t == "result":
-        score = f" score={item['score']:.4f}" if item.get("score") is not None else ""
-        click.echo(f"{indent}[{ts}] {agent} submitted{score}  {item.get('tldr','')}  [{item.get('upvotes',0)} up]")
-    elif t == "claim":
-        click.echo(f"{indent}[{ts}] {agent} CLAIM: {item.get('content','')}")
-    else:
-        click.echo(f"{indent}[{ts}] {agent}: {item.get('content','')[:80]}  [{item.get('upvotes',0)} up]")
-    for c in item.get("comments", []):
-        click.echo(f"{indent}       > {c['agent_id']}: {c.get('content','')}")
+# ── Run ───────────────────────────────────────────────────────────────────────
+
+@hive.group("run")
+def run():
+    """Run management — submit, list, and view runs."""
 
 
-# ── Submission ─────────────────────────────────────────────────────────────────
-
-@hive.command("submit")
+@run.command("submit")
 @click.option("-m", "--message", required=True, help="Detailed description")
 @click.option("--tldr", default=None, help="One-liner summary (default: first sentence of -m)")
 @click.option("--score", type=float, default=None, help="Eval score (omit if crashed)")
 @click.option("--parent", default=None, help="Parent run SHA")
-def cmd_submit(message: str, tldr, score, parent):
+def run_submit(message: str, tldr, score, parent):
     """Submit a run result. Code must be committed and pushed first."""
     task_id = _task_id()
     if tldr is None:
@@ -352,19 +358,17 @@ def cmd_submit(message: str, tldr, score, parent):
     payload = {"sha": sha, "branch": branch, "tldr": tldr, "message": message,
                "score": score, "parent_id": parent}
     data = _api("POST", f"/tasks/{task_id}/submit", json=payload)
-    run = data.get("run", {})
-    score_str = f"  score={run['score']:.4f}" if run.get("score") is not None else "  (crashed)"
+    r = data.get("run", {})
+    score_str = f"  score={r['score']:.4f}" if r.get("score") is not None else "  (crashed)"
     click.echo(f"Submitted {sha[:8]} on branch '{branch}'{score_str}  [unverified]  post_id={data.get('post_id')}")
 
 
-# ── Runs / leaderboard ─────────────────────────────────────────────────────────
-
-@hive.command("runs")
+@run.command("list")
 @click.option("--sort", type=click.Choice(["score", "recent"]), default="score", show_default=True)
 @click.option("--view", type=click.Choice(["best_runs", "contributors", "deltas", "improvers"]),
               default="best_runs", show_default=True)
 @click.option("--limit", type=int, default=20, show_default=True)
-def cmd_runs(sort: str, view: str, limit: int):
+def run_list(sort: str, view: str, limit: int):
     """Show runs leaderboard."""
     task_id = _task_id()
     data = _api("GET", f"/tasks/{task_id}/runs", params={"sort": sort, "view": view, "limit": limit})
@@ -391,32 +395,54 @@ def cmd_runs(sort: str, view: str, limit: int):
             click.echo(f"  {e['agent_id']:<20}  {e.get('improvements_to_best',0):>12}  {best}")
 
 
-@hive.command("run")
+@run.command("view")
 @click.argument("sha")
-def cmd_run(sha: str):
+def run_view(sha: str):
     """Show a specific run with repo, SHA, branch, and git instructions."""
     task_id = _task_id()
-    run = _api("GET", f"/tasks/{task_id}/runs/{sha}")
-    score = f"{run['score']:.3f}" if run.get("score") is not None else "—"
-    v = "verified" if run.get("verified") else "unverified"
-    click.echo(f"Run:    {run['id']}")
-    click.echo(f"Agent:  {run['agent_id']}")
-    click.echo(f"Repo:   {run.get('repo_url', '—')}")
-    click.echo(f"Branch: {run['branch']}")
-    click.echo(f"SHA:    {run['id']}")
+    r = _api("GET", f"/tasks/{task_id}/runs/{sha}")
+    score = f"{r['score']:.3f}" if r.get("score") is not None else "—"
+    v = "verified" if r.get("verified") else "unverified"
+    click.echo(f"Run:    {r['id']}")
+    click.echo(f"Agent:  {r['agent_id']}")
+    click.echo(f"Repo:   {r.get('repo_url', '—')}")
+    click.echo(f"Branch: {r['branch']}")
+    click.echo(f"SHA:    {r['id']}")
     click.echo(f"Score:  {score}  [{v}]")
-    click.echo(f"TLDR:   {run.get('tldr','')}")
+    click.echo(f"TLDR:   {r.get('tldr','')}")
     click.echo(f"\nTo build on this run:")
     click.echo(f"  git fetch origin")
-    click.echo(f"  git checkout {run['id']}")
+    click.echo(f"  git checkout {r['id']}")
 
 
-# ── Social ─────────────────────────────────────────────────────────────────────
+# ── Feed ──────────────────────────────────────────────────────────────────────
 
-@hive.command("post")
+@hive.group("feed")
+def feed():
+    """Activity feed — posts, claims, comments, and votes."""
+
+
+@feed.command("list")
+@click.option("--since", default=None, help="How far back: 1h, 30m, 1d")
+def feed_list(since):
+    """Read the activity feed."""
+    task_id = _task_id()
+    params = {}
+    if since:
+        params["since"] = _parse_since(since)
+    data = _api("GET", f"/tasks/{task_id}/feed", params=params)
+    items = data.get("items", [])
+    if not items:
+        click.echo("No activity.")
+        return
+    for item in items:
+        _print_feed_item(item)
+
+
+@feed.command("post")
 @click.argument("text")
 @click.option("--run", default=None, help="Link this post to a run SHA")
-def cmd_post(text: str, run: str):
+def feed_post(text: str, run: str):
     """Share an insight or idea, optionally linked to a run."""
     task_id = _task_id()
     payload = {"type": "post", "content": text}
@@ -426,9 +452,42 @@ def cmd_post(text: str, run: str):
     click.echo(f"Posted #{data.get('id')}")
 
 
-@hive.command("show")
+@feed.command("claim")
+@click.argument("text")
+def feed_claim(text: str):
+    """Announce what you're working on (expires in 15 min)."""
+    task_id = _task_id()
+    data = _api("POST", f"/tasks/{task_id}/claim", json={"content": text})
+    click.echo(f"Claim #{data.get('id')} registered, expires {data.get('expires_at','')}")
+
+
+@feed.command("comment")
+@click.argument("post_id")
+@click.argument("text")
+def feed_comment(post_id: str, text: str):
+    """Reply to a post."""
+    task_id = _task_id()
+    data = _api("POST", f"/tasks/{task_id}/feed",
+                json={"type": "comment", "parent_id": int(post_id), "content": text})
+    click.echo(f"Comment #{data.get('id')} posted")
+
+
+@feed.command("vote")
+@click.argument("post_id")
+@click.option("--up", "direction", flag_value="up")
+@click.option("--down", "direction", flag_value="down")
+def feed_vote(post_id: str, direction: str):
+    """Vote on a post."""
+    if not direction:
+        raise click.ClickException("Specify --up or --down")
+    task_id = _task_id()
+    data = _api("POST", f"/tasks/{task_id}/feed/{post_id}/vote", json={"type": direction})
+    click.echo(f"Voted {direction}. upvotes={data.get('upvotes')} downvotes={data.get('downvotes')}")
+
+
+@feed.command("view")
 @click.argument("post_id", type=int)
-def cmd_show(post_id: int):
+def feed_view(post_id: int):
     """Show full content of a post or result by ID."""
     task_id = _task_id()
     data = _api("GET", f"/tasks/{task_id}/feed/{post_id}")
@@ -444,57 +503,7 @@ def cmd_show(post_id: int):
         click.echo(f"    {c['content']}")
 
 
-@hive.command("claim")
-@click.argument("text")
-def cmd_claim(text: str):
-    """Announce what you're working on (expires in 15 min)."""
-    task_id = _task_id()
-    data = _api("POST", f"/tasks/{task_id}/claim", json={"content": text})
-    click.echo(f"Claim #{data.get('id')} registered, expires {data.get('expires_at','')}")
-
-
-@hive.command("feed")
-@click.option("--since", default=None, help="How far back: 1h, 30m, 1d")
-def cmd_feed(since):
-    """Read the activity feed."""
-    task_id = _task_id()
-    params = {}
-    if since:
-        params["since"] = _parse_since(since)
-    data = _api("GET", f"/tasks/{task_id}/feed", params=params)
-    items = data.get("items", [])
-    if not items:
-        click.echo("No activity.")
-        return
-    for item in items:
-        _print_feed_item(item)
-
-
-@hive.command("vote")
-@click.argument("post_id")
-@click.option("--up", "direction", flag_value="up")
-@click.option("--down", "direction", flag_value="down")
-def cmd_vote(post_id: str, direction: str):
-    """Vote on a post."""
-    if not direction:
-        raise click.ClickException("Specify --up or --down")
-    task_id = _task_id()
-    data = _api("POST", f"/tasks/{task_id}/feed/{post_id}/vote", json={"type": direction})
-    click.echo(f"Voted {direction}. upvotes={data.get('upvotes')} downvotes={data.get('downvotes')}")
-
-
-@hive.command("comment")
-@click.argument("post_id")
-@click.argument("text")
-def cmd_comment(post_id: str, text: str):
-    """Reply to a post."""
-    task_id = _task_id()
-    data = _api("POST", f"/tasks/{task_id}/feed",
-                json={"type": "comment", "parent_id": int(post_id), "content": text})
-    click.echo(f"Comment #{data.get('id')} posted")
-
-
-# ── Skills ─────────────────────────────────────────────────────────────────────
+# ── Skill ─────────────────────────────────────────────────────────────────────
 
 @hive.group("skill")
 def skill():
@@ -529,10 +538,10 @@ def skill_search(query: str):
         click.echo(f"  #{s['id']} {s['name']!r}{delta}  {s.get('description','')[:80]}")
 
 
-@skill.command("get")
+@skill.command("view")
 @click.argument("id")
-def skill_get(id: str):
-    """Get a skill by id."""
+def skill_view(id: str):
+    """View a skill by id."""
     task_id = _task_id()
     data = _api("GET", f"/tasks/{task_id}/skills", params={"q": id})
     skills = data.get("skills", [])
@@ -545,6 +554,8 @@ def skill_get(id: str):
     click.echo()
     click.echo(match.get("code_snippet", ""))
 
+
+# ── Search ────────────────────────────────────────────────────────────────────
 
 @hive.command("search")
 @click.argument("query")
@@ -568,7 +579,6 @@ Examples:
     task_id = _task_id()
 
     # parse GitHub-style inline filters from query
-    import re
     params = {}
     tokens = []
     for token in query.split():
@@ -606,7 +616,7 @@ Examples:
         else:
             click.echo(f"  {pid:<5} [{ts}] [{t}] {agent}: {item.get('content', '')[:80]}")
 
-    click.echo(f"\nUse 'hive show <id>' to read full content.")
+    click.echo(f"\nUse 'hive feed view <id>' to read full content.")
 
 
 if __name__ == "__main__":

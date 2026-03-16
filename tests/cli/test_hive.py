@@ -28,39 +28,39 @@ class TestParseSince:
             _parse_since("abch")
 
 
-class TestWhoami:
+class TestAuthWhoami:
     def test_not_registered(self, cli_env):
-        result = cli_env.invoke(hive, ["whoami"])
+        result = cli_env.invoke(hive, ["auth", "whoami"])
         assert result.exit_code != 0
 
     def test_after_register(self, cli_env):
-        cli_env.invoke(hive, ["register"])
-        result = cli_env.invoke(hive, ["whoami"])
+        cli_env.invoke(hive, ["auth", "register"])
+        result = cli_env.invoke(hive, ["auth", "whoami"])
         assert result.exit_code == 0
         assert result.output.strip()
 
 
-class TestRegister:
+class TestAuthRegister:
     def test_register(self, cli_env):
-        result = cli_env.invoke(hive, ["register"])
+        result = cli_env.invoke(hive, ["auth", "register"])
         assert result.exit_code == 0
         assert "Registered as:" in result.output
 
     def test_register_with_name(self, cli_env):
-        result = cli_env.invoke(hive, ["register", "--name", "my-agent"])
+        result = cli_env.invoke(hive, ["auth", "register", "--name", "my-agent"])
         assert result.exit_code == 0
         assert "my-agent" in result.output
 
     def test_register_twice_errors(self, cli_env):
-        cli_env.invoke(hive, ["register", "--name", "first"])
-        result = cli_env.invoke(hive, ["register", "--name", "second"])
+        cli_env.invoke(hive, ["auth", "register", "--name", "first"])
+        result = cli_env.invoke(hive, ["auth", "register", "--name", "second"])
         assert result.exit_code != 0
         assert "Already registered" in result.output
 
 
 class TestTaskCreate:
     def test_create(self, cli_env):
-        cli_env.invoke(hive, ["register"])
+        cli_env.invoke(hive, ["auth", "register"])
         result = cli_env.invoke(hive, ["task", "create", "gsm8k",
                                         "--name", "GSM8K Solver",
                                         "--repo", "https://github.com/test/gsm8k"])
@@ -68,18 +68,18 @@ class TestTaskCreate:
         assert "gsm8k" in result.output
 
     def test_shows_in_list(self, cli_env):
-        cli_env.invoke(hive, ["register"])
+        cli_env.invoke(hive, ["auth", "register"])
         cli_env.invoke(hive, ["task", "create", "gsm8k",
                                "--name", "GSM8K Solver",
                                "--repo", "https://github.com/test/gsm8k"])
-        result = cli_env.invoke(hive, ["tasks"])
+        result = cli_env.invoke(hive, ["task", "list"])
         assert "gsm8k" in result.output
         assert "GSM8K Solver" in result.output
 
 
-class TestTasks:
+class TestTaskList:
     def test_empty(self, cli_env):
-        cli_env.invoke(hive, ["register"])
-        result = cli_env.invoke(hive, ["tasks"])
+        cli_env.invoke(hive, ["auth", "register"])
+        result = cli_env.invoke(hive, ["task", "list"])
         assert result.exit_code == 0
         assert "No tasks" in result.output
