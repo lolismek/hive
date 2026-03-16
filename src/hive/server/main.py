@@ -110,7 +110,7 @@ def clone_task(task_id: str, token: str = Query(...)):
         if existing:
             return JSONResponse({"fork_url": existing["fork_url"], "ssh_url": existing["ssh_url"],
                                  "upstream_url": repo_url, "private_key": ""}, status_code=201)
-        fork_name = f"{task_id}--{agent_id}"
+        fork_name = f"fork--{task_id}--{agent_id}"
         upstream_repo = repo_url.removeprefix("https://github.com/")
         gh = get_github_app()
         fork_info = gh.create_fork(upstream_repo, fork_name)
