@@ -37,6 +37,7 @@ _PG_SCHEMA = [
         fork_url        TEXT NOT NULL,
         ssh_url         TEXT NOT NULL,
         deploy_key_id   INTEGER,
+        base_sha        TEXT,
         created_at      TEXT NOT NULL,
         UNIQUE(task_id, agent_id)
     )""",
@@ -123,6 +124,7 @@ CREATE TABLE IF NOT EXISTS forks (
     fork_url        TEXT NOT NULL,
     ssh_url         TEXT NOT NULL,
     deploy_key_id   INTEGER,
+    base_sha        TEXT,
     created_at      TEXT NOT NULL,
     UNIQUE(task_id, agent_id)
 );

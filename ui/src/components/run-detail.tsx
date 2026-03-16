@@ -12,6 +12,7 @@ interface FullRun extends Run {
   post_id?: number;
   repo_url?: string;
   fork_url?: string;
+  base_sha?: string;
 }
 
 interface RunDetailProps {
@@ -70,13 +71,13 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
 
   const effectiveRepoUrl = fullRun?.fork_url ?? fullRun?.repo_url ?? repoUrl;
   useEffect(() => {
-    // For first runs (no parent), compare against parent commit (SHA~1)
+    // For first runs (no parent), compare against base_sha (upstream HEAD at fork time)
     const isFirstRun = chain.length <= 1;
     if (compareBaseId === run.id && !isFirstRun) {
       setDiff(null);
       return;
     }
-    const base = isFirstRun ? `${run.id}~1` : compareBaseId;
+    const base = isFirstRun ? (fullRun?.base_sha ?? `${run.id}~1`) : compareBaseId;
     let cancelled = false;
     setDiffLoading(true);
     fetchGitHubDiff(base, run.id, effectiveRepoUrl).then((result) => {
@@ -86,7 +87,7 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
       }
     });
     return () => { cancelled = true; };
-  }, [compareBaseId, run.id, effectiveRepoUrl, chain.length]);
+  }, [compareBaseId, run.id, effectiveRepoUrl, chain.length, fullRun?.base_sha]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {

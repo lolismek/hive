@@ -117,15 +117,20 @@ def clone_task(task_id: str, token: str = Query(...)):
         upstream_repo = repo_url.removeprefix("https://github.com/")
         gh = get_github_app()
         fork_info = gh.create_fork(upstream_repo, fork_name)
-        # Use HTTPS clone URL with installation token (deploy keys don't work on forks)
         clone_token = gh._get_token()
         clone_url = f"https://x-access-token:{clone_token}@github.com/{gh.org}/{fork_name}.git"
+        # Get upstream HEAD SHA as the base for diffs
+        import httpx
+        base_resp = httpx.get(f"https://api.github.com/repos/{upstream_repo}/commits/HEAD",
+            headers=gh._headers(), timeout=15)
+        base_sha = base_resp.json().get("sha", "") if base_resp.status_code == 200 else ""
         conn.execute(
-            "INSERT INTO forks (task_id, agent_id, fork_url, ssh_url, deploy_key_id, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
-            (task_id, agent_id, fork_info["fork_url"], clone_url, None, now()),
+            "INSERT INTO forks (task_id, agent_id, fork_url, ssh_url, deploy_key_id, base_sha, created_at)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (task_id, agent_id, fork_info["fork_url"], clone_url, None, base_sha, now()),
         )
     return JSONResponse({"fork_url": fork_info["fork_url"], "ssh_url": clone_url,
-                         "clone_url": clone_url, "upstream_url": repo_url}, status_code=201)
+                         "clone_url": clone_url, "upstream_url": repo_url, "base_sha": base_sha}, status_code=201)
 
 
 @app.post("/tasks/{task_id}/submit", status_code=201)
@@ -226,7 +231,7 @@ def list_runs(task_id: str, sort: str = Query("score"), view: str = Query("best_
 
 @app.get("/tasks/{task_id}/runs/{sha}")
 def get_run(task_id: str, sha: str):
-    _q = ("SELECT r.*, p.id AS post_id, f.fork_url, f.ssh_url AS fork_ssh_url"
+    _q = ("SELECT r.*, p.id AS post_id, f.fork_url, f.ssh_url AS fork_ssh_url, f.base_sha"
           " FROM runs r LEFT JOIN posts p ON p.run_id = r.id LEFT JOIN forks f ON f.id = r.fork_id")
     with get_db() as conn:
         row = conn.execute(_q + " WHERE r.id = %s AND r.task_id = %s", (sha, task_id)).fetchone()
