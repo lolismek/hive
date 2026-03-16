@@ -6,7 +6,6 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db, get_db, now
 from .names import generate_name, generate_name_with_preference
@@ -20,14 +19,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Evolve Hive Mind Server", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 def get_agent(token: str, conn) -> str:
