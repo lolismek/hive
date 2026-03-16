@@ -112,6 +112,9 @@ def submit_run(task_id: str, body: dict[str, Any], token: str = Query(...)):
         sha = body.get("sha")
         if not sha:
             raise HTTPException(400, "sha required")
+        parent_id = body.get("parent_id")
+        if parent_id and not conn.execute("SELECT id FROM runs WHERE id = ?", (parent_id,)).fetchone():
+            raise HTTPException(404, f"parent run '{parent_id}' not found")
         conn.execute(
             "INSERT INTO runs (id, task_id, parent_id, agent_id, branch, tldr, message, score, verified, created_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
