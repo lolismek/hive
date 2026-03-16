@@ -76,7 +76,7 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
                   {node.run.tldr.length > 24 ? node.run.tldr.slice(0, 24) + "..." : node.run.tldr}
                 </text>
                 <text x={NODE_W / 2} y={44} fill="#111827" fontSize={16} fontFamily="'DM Sans', sans-serif" fontWeight={600} textAnchor="middle">
-                  {node.run.agent_id}
+                  {node.run.agent_id.length > 20 ? node.run.agent_id.slice(0, 20) + "…" : node.run.agent_id}
                 </text>
                 {node.run.score !== null && (
                   <text x={NODE_W / 2} y={61}
