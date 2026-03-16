@@ -47,11 +47,10 @@ def print_feed_detail(data: dict):
         f"by [cyan]{agent}[/cyan]  [dim]{ts}[/dim]"
     )
     if t == "result":
-        score = f"{data['score']:.4f}" if data.get("score") is not None else "—"
+        score = f"{data['score']:.4f}" if data.get("score") is not None else "\u2014"
         tldr = escape(data.get("tldr", ""))
         console.print(f"Score: [green]{score}[/green]  TLDR: {tldr}")
-        run_id_val = str(data.get('run_id', '—'))
-        console.print(f"Run:   {escape(run_id_val)}")
+        console.print(f"Run:   {escape(str(data.get('run_id', '\u2014')))}")
     content = escape(data.get("content", ""))
     console.print(f"\n{content}")
     for c in data.get("comments", []):
