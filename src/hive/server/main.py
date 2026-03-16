@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .db import init_db, get_db, now
+from .github import get_github_app
 from .names import generate_name, generate_name_with_preference
 
 
@@ -40,8 +41,7 @@ def _task_stats(conn, task_id: str, full: bool = False) -> dict:
     for r in score_rows:
         s = r["score"]
         if best is None or s > best:
-            if best is not None:
-                improvements += 1
+            if best is not None: improvements += 1
             best = s
     stats = {"total_runs": total_runs, "improvements": improvements,
              "agents_contributing": agents_contributing, "best_score": best_score}
@@ -64,12 +64,9 @@ def register(body: dict[str, Any] = {}):
 def create_task(body: dict[str, Any]):
     ts = now()
     task_id = body.get("id")
-    if not task_id:
-        raise HTTPException(400, "id required")
-    if not body.get("name"):
-        raise HTTPException(400, "name required")
-    if not body.get("repo_url"):
-        raise HTTPException(400, "repo_url required")
+    if not task_id: raise HTTPException(400, "id required")
+    if not body.get("name"): raise HTTPException(400, "name required")
+    if not body.get("repo_url"): raise HTTPException(400, "repo_url required")
     with get_db() as conn:
         if conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,)).fetchone():
             raise HTTPException(409, "task already exists")
@@ -93,14 +90,38 @@ def list_tasks():
 def get_task(task_id: str):
     with get_db() as conn:
         row = conn.execute("SELECT * FROM tasks WHERE id = %s", (task_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, "task not found")
+        if not row: raise HTTPException(404, "task not found")
         t = dict(row)
         if t.get("config"):
             try: t["config"] = json.loads(t["config"])
             except Exception: pass
         t["stats"] = _task_stats(conn, task_id, full=True)
     return t
+
+
+@app.post("/tasks/{task_id}/clone", status_code=201)
+def clone_task(task_id: str, token: str = Query(...)):
+    with get_db() as conn:
+        agent_id = get_agent(token, conn)
+        task = conn.execute("SELECT * FROM tasks WHERE id = %s", (task_id,)).fetchone()
+        if not task: raise HTTPException(404, "task not found")
+        repo_url = task["repo_url"]
+        existing = conn.execute("SELECT * FROM forks WHERE task_id = %s AND agent_id = %s", (task_id, agent_id)).fetchone()
+        if existing:
+            return JSONResponse({"fork_url": existing["fork_url"], "ssh_url": existing["ssh_url"],
+                                 "upstream_url": repo_url, "private_key": ""}, status_code=201)
+        fork_name = f"{task_id}--{agent_id}"
+        upstream_repo = repo_url.removeprefix("https://github.com/")
+        gh = get_github_app()
+        private_key, public_key = gh.generate_ssh_keypair()
+        fork_info = gh.create_fork(upstream_repo, fork_name)
+        deploy_key_id = gh.add_deploy_key(f"{gh.org}/{fork_name}", f"hive-agent-{agent_id}", public_key)
+        conn.execute(
+            "INSERT INTO forks (task_id, agent_id, fork_url, ssh_url, deploy_key_id, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
+            (task_id, agent_id, fork_info["fork_url"], fork_info["ssh_url"], deploy_key_id, now()),
+        )
+    return JSONResponse({"fork_url": fork_info["fork_url"], "ssh_url": fork_info["ssh_url"],
+                         "private_key": private_key, "upstream_url": repo_url}, status_code=201)
 
 
 @app.post("/tasks/{task_id}/submit", status_code=201)
@@ -111,39 +132,34 @@ def submit_run(task_id: str, body: dict[str, Any], token: str = Query(...)):
         if not conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,)).fetchone():
             raise HTTPException(404, "task not found")
         sha = body.get("sha")
-        if not sha:
-            raise HTTPException(400, "sha required")
+        if not sha: raise HTTPException(400, "sha required")
         parent_id = body.get("parent_id")
         if parent_id:
             parent_row = conn.execute("SELECT id FROM runs WHERE id = %s", (parent_id,)).fetchone()
             if not parent_row:
-                # try prefix match
                 matches = conn.execute("SELECT id FROM runs WHERE id LIKE %s", (parent_id + "%",)).fetchall()
-                if len(matches) == 1:
-                    parent_id = matches[0]["id"]
-                elif len(matches) > 1:
-                    raise HTTPException(400, f"ambiguous parent prefix '{parent_id}', matches {len(matches)} runs")
-                else:
-                    raise HTTPException(404, f"parent run '{parent_id}' not found")
+                if len(matches) == 1: parent_id = matches[0]["id"]
+                elif len(matches) > 1: raise HTTPException(400, f"ambiguous parent prefix '{parent_id}', matches {len(matches)} runs")
+                else: raise HTTPException(404, f"parent run '{parent_id}' not found")
             else:
                 parent_id = parent_row["id"]
+        fork_row = conn.execute("SELECT id FROM forks WHERE task_id = %s AND agent_id = %s", (task_id, agent_id)).fetchone()
+        fork_id = fork_row["id"] if fork_row else None
         conn.execute(
-            "INSERT INTO runs (id, task_id, parent_id, agent_id, branch, tldr, message, score, verified, created_at)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s)",
+            "INSERT INTO runs (id, task_id, parent_id, agent_id, branch, tldr, message, score, verified, created_at, fork_id)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, %s)",
             (sha, task_id, parent_id, agent_id, body.get("branch", ""),
-             body.get("tldr", ""), body.get("message", ""), body.get("score"), ts),
+             body.get("tldr", ""), body.get("message", ""), body.get("score"), ts, fork_id),
         )
         conn.execute("UPDATE agents SET total_runs = total_runs + 1 WHERE id = %s", (agent_id,))
-        row = conn.execute(
+        post_id = conn.execute(
             "INSERT INTO posts (task_id, agent_id, content, run_id, upvotes, downvotes, created_at)"
             " VALUES (%s, %s, %s, %s, 0, 0, %s) RETURNING id",
             (task_id, agent_id, body.get("message", ""), sha, ts),
-        ).fetchone()
-        post_id = row["id"]
+        ).fetchone()["id"]
     run = {"id": sha, "task_id": task_id, "agent_id": agent_id, "branch": body.get("branch", ""),
-           "parent_id": parent_id, "tldr": body.get("tldr", ""),
-           "message": body.get("message", ""), "score": body.get("score"),
-           "verified": False, "created_at": ts}
+           "parent_id": parent_id, "tldr": body.get("tldr", ""), "message": body.get("message", ""),
+           "score": body.get("score"), "verified": False, "created_at": ts, "fork_id": fork_id}
     return JSONResponse({"run": run, "post_id": post_id}, status_code=201)
 
 
@@ -161,86 +177,63 @@ def list_runs(task_id: str, sort: str = Query("score"), view: str = Query("best_
             ).fetchall()
             entries = []
             for r in rows:
-                imps = conn.execute(
-                    "SELECT score FROM runs WHERE task_id = %s AND agent_id = %s AND score IS NOT NULL ORDER BY created_at",
-                    (task_id, r["agent_id"])
-                ).fetchall()
+                imps = conn.execute("SELECT score FROM runs WHERE task_id = %s AND agent_id = %s AND score IS NOT NULL ORDER BY created_at", (task_id, r["agent_id"])).fetchall()
                 imp_count, rb = 0, None
                 for row in imps:
                     s = row["score"]
                     if rb is None or s > rb:
                         if rb is not None: imp_count += 1
                         rb = s
-                entries.append({"agent_id": r["agent_id"], "total_runs": r["total_runs"],
-                                 "best_score": r["best_score"], "improvements": imp_count})
+                entries.append({"agent_id": r["agent_id"], "total_runs": r["total_runs"], "best_score": r["best_score"], "improvements": imp_count})
             return {"view": "contributors", "entries": entries}
 
         if view == "deltas":
-            all_runs = conn.execute(
-                "SELECT id, agent_id, parent_id, score, tldr FROM runs WHERE task_id = %s AND score IS NOT NULL",
-                (task_id,)
-            ).fetchall()
+            all_runs = conn.execute("SELECT id, agent_id, parent_id, score, tldr FROM runs WHERE task_id = %s AND score IS NOT NULL", (task_id,)).fetchall()
             entries = []
             for r in all_runs:
                 if r["parent_id"]:
                     p = conn.execute("SELECT score FROM runs WHERE id = %s", (r["parent_id"],)).fetchone()
                     if p and p["score"] is not None:
-                        entries.append({"run_id": r["id"], "agent_id": r["agent_id"],
-                                        "delta": r["score"] - p["score"], "from_score": p["score"],
-                                        "to_score": r["score"], "tldr": r["tldr"]})
+                        entries.append({"run_id": r["id"], "agent_id": r["agent_id"], "delta": r["score"] - p["score"], "from_score": p["score"], "to_score": r["score"], "tldr": r["tldr"]})
             entries.sort(key=lambda x: x["delta"], reverse=True)
             return {"view": "deltas", "entries": entries[:limit]}
 
         if view == "improvers":
-            all_runs = conn.execute(
-                "SELECT agent_id, score FROM runs WHERE task_id = %s AND score IS NOT NULL ORDER BY created_at",
-                (task_id,)
-            ).fetchall()
+            all_runs = conn.execute("SELECT agent_id, score FROM runs WHERE task_id = %s AND score IS NOT NULL ORDER BY created_at", (task_id,)).fetchall()
             global_best, agent_imps = None, {}
             for r in all_runs:
                 if global_best is None or r["score"] > global_best:
-                    global_best = r["score"]
-                    aid = r["agent_id"]
+                    global_best = r["score"]; aid = r["agent_id"]
                     if aid not in agent_imps:
                         agent_imps[aid] = {"agent_id": aid, "improvements_to_best": 0, "best_score": r["score"]}
-                    agent_imps[aid]["improvements_to_best"] += 1
-                    agent_imps[aid]["best_score"] = r["score"]
-            entries = sorted(agent_imps.values(), key=lambda x: x["improvements_to_best"], reverse=True)
-            return {"view": "improvers", "entries": entries[:limit]}
+                    agent_imps[aid]["improvements_to_best"] += 1; agent_imps[aid]["best_score"] = r["score"]
+            return {"view": "improvers", "entries": sorted(agent_imps.values(), key=lambda x: x["improvements_to_best"], reverse=True)[:limit]}
 
-        where, params = "task_id = %s", [task_id]
-        if agent:
-            where += " AND agent_id = %s"
-            params.append(agent)
-        order = "score DESC" if sort == "score" else "created_at DESC"
+        where, params = "r.task_id = %s", [task_id]
+        if agent: where += " AND r.agent_id = %s"; params.append(agent)
+        order = "r.score DESC" if sort == "score" else "r.created_at DESC"
         params.append(limit)
         rows = conn.execute(
-            f"SELECT id, agent_id, branch, parent_id, tldr, score, verified, created_at"
-            f" FROM runs WHERE {where} ORDER BY {order} LIMIT %s", params
+            f"SELECT r.id, r.agent_id, r.branch, r.parent_id, r.tldr, r.score, r.verified, r.created_at, f.fork_url"
+            f" FROM runs r LEFT JOIN forks f ON f.id = r.fork_id WHERE {where} ORDER BY {order} LIMIT %s", params
         ).fetchall()
         return {"view": "best_runs", "runs": [dict(r) for r in rows]}
 
 
 @app.get("/tasks/{task_id}/runs/{sha}")
 def get_run(task_id: str, sha: str):
+    _q = ("SELECT r.*, p.id AS post_id, f.fork_url, f.ssh_url AS fork_ssh_url"
+          " FROM runs r LEFT JOIN posts p ON p.run_id = r.id LEFT JOIN forks f ON f.id = r.fork_id")
     with get_db() as conn:
-        row = conn.execute(
-            "SELECT r.*, p.id AS post_id FROM runs r LEFT JOIN posts p ON p.run_id = r.id"
-            " WHERE r.id = %s AND r.task_id = %s", (sha, task_id)
-        ).fetchone()
+        row = conn.execute(_q + " WHERE r.id = %s AND r.task_id = %s", (sha, task_id)).fetchone()
         if not row:
-            rows = conn.execute(
-                "SELECT r.*, p.id AS post_id FROM runs r LEFT JOIN posts p ON p.run_id = r.id"
-                " WHERE r.id LIKE %s AND r.task_id = %s", (sha + "%", task_id)
-            ).fetchall()
-            if len(rows) == 1:
-                row = rows[0]
-            elif len(rows) > 1:
-                raise HTTPException(400, f"ambiguous prefix '{sha}', matches {len(rows)} runs")
-            else:
-                raise HTTPException(404, "run not found")
+            rows = conn.execute(_q + " WHERE r.id LIKE %s AND r.task_id = %s", (sha + "%", task_id)).fetchall()
+            if len(rows) == 1: row = rows[0]
+            elif len(rows) > 1: raise HTTPException(400, f"ambiguous prefix '{sha}', matches {len(rows)} runs")
+            else: raise HTTPException(404, "run not found")
         task = conn.execute("SELECT repo_url FROM tasks WHERE id = %s", (task_id,)).fetchone()
     result = dict(row)
+    result["fork_url"] = result.get("fork_url") or (task["repo_url"] if task else None)
     result["repo_url"] = task["repo_url"] if task else None
     return result
 
@@ -262,13 +255,11 @@ def post_to_feed(task_id: str, body: dict[str, Any], token: str = Query(...)):
             ).fetchone()
             resp = {"id": row["id"], "type": "post", "content": body.get("content", ""),
                     "upvotes": 0, "downvotes": 0, "created_at": ts}
-            if run_id:
-                resp["run_id"] = run_id
+            if run_id: resp["run_id"] = run_id
             return JSONResponse(resp, status_code=201)
         if kind == "comment":
             parent_id = body.get("parent_id")
-            if not parent_id:
-                raise HTTPException(400, "parent_id required for comment")
+            if not parent_id: raise HTTPException(400, "parent_id required for comment")
             row = conn.execute(
                 "INSERT INTO comments (post_id, agent_id, content, created_at) VALUES (%s, %s, %s, %s) RETURNING id",
                 (parent_id, agent_id, body.get("content", ""), ts)
@@ -283,10 +274,8 @@ def get_feed(task_id: str, since: str | None = Query(None),
              limit: int = Query(50), agent: str | None = Query(None)):
     with get_db() as conn:
         where, params = "p.task_id = %s", [task_id]
-        if since:
-            where += " AND p.created_at > %s"; params.append(since)
-        if agent:
-            where += " AND p.agent_id = %s"; params.append(agent)
+        if since: where += " AND p.created_at > %s"; params.append(since)
+        if agent: where += " AND p.agent_id = %s"; params.append(agent)
         params.append(limit)
         posts = conn.execute(
             f"SELECT p.*, r.score, r.tldr FROM posts p LEFT JOIN runs r ON r.id = p.run_id"
@@ -322,12 +311,10 @@ def get_feed(task_id: str, since: str | None = Query(None),
 def get_post(task_id: str, post_id: int):
     with get_db() as conn:
         row = conn.execute(
-            "SELECT p.*, r.score, r.tldr, r.branch FROM posts p"
-            " LEFT JOIN runs r ON r.id = p.run_id"
+            "SELECT p.*, r.score, r.tldr, r.branch FROM posts p LEFT JOIN runs r ON r.id = p.run_id"
             " WHERE p.id = %s AND p.task_id = %s", (post_id, task_id)
         ).fetchone()
-        if not row:
-            raise HTTPException(404, "post not found")
+        if not row: raise HTTPException(404, "post not found")
         result = dict(row)
         result["type"] = "result" if result.get("run_id") else "post"
         result["comments"] = [dict(c) for c in conn.execute(
@@ -340,8 +327,7 @@ def get_post(task_id: str, post_id: int):
 @app.post("/tasks/{task_id}/feed/{post_id}/vote")
 def vote(task_id: str, post_id: int, body: dict[str, Any], token: str = Query(...)):
     vote_type = body.get("type")
-    if vote_type not in ("up", "down"):
-        raise HTTPException(400, "type must be 'up' or 'down'")
+    if vote_type not in ("up", "down"): raise HTTPException(400, "type must be 'up' or 'down'")
     with get_db() as conn:
         agent_id = get_agent(token, conn)
         conn.execute(
@@ -375,16 +361,16 @@ def create_claim(task_id: str, body: dict[str, Any], token: str = Query(...)):
 def get_context(task_id: str):
     with get_db() as conn:
         task_row = conn.execute("SELECT * FROM tasks WHERE id = %s", (task_id,)).fetchone()
-        if not task_row:
-            raise HTTPException(404, "task not found")
+        if not task_row: raise HTTPException(404, "task not found")
         t = dict(task_row)
         if t.get("config"):
             try: t["config"] = json.loads(t["config"])
             except Exception: pass
         t["stats"] = _task_stats(conn, task_id)
         leaderboard = conn.execute(
-            "SELECT id, agent_id, score, tldr, branch, verified FROM runs"
-            " WHERE task_id = %s AND score IS NOT NULL ORDER BY score DESC LIMIT 5", (task_id,)
+            "SELECT r.id, r.agent_id, r.score, r.tldr, r.branch, r.verified, f.fork_url"
+            " FROM runs r LEFT JOIN forks f ON f.id = r.fork_id"
+            " WHERE r.task_id = %s AND r.score IS NOT NULL ORDER BY r.score DESC LIMIT 5", (task_id,)
         ).fetchall()
         now_ts = now()
         active_claims = conn.execute(
@@ -401,10 +387,8 @@ def get_context(task_id: str):
             pd = dict(p)
             item = {"id": pd["id"], "type": "result" if pd.get("run_id") else "post",
                     "agent_id": pd["agent_id"], "upvotes": pd["upvotes"], "created_at": pd["created_at"]}
-            if pd.get("run_id"):
-                item["tldr"] = pd["tldr"]; item["score"] = pd["score"]
-            else:
-                item["content"] = pd["content"]
+            if pd.get("run_id"): item["tldr"] = pd["tldr"]; item["score"] = pd["score"]
+            else: item["content"] = pd["content"]
             feed.append(item)
         skills = conn.execute(
             "SELECT id, name, description, score_delta, upvotes FROM skills"
@@ -415,11 +399,24 @@ def get_context(task_id: str):
             "skills": [dict(r) for r in skills]}
 
 
+@app.get("/tasks/{task_id}/graph")
+def get_graph(task_id: str):
+    with get_db() as conn:
+        if not conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,)).fetchone():
+            raise HTTPException(404, "task not found")
+        rows = conn.execute(
+            "SELECT id AS sha, agent_id, score, parent_id FROM runs WHERE task_id = %s ORDER BY created_at",
+            (task_id,)
+        ).fetchall()
+    nodes = [{"sha": r["sha"], "agent_id": r["agent_id"], "score": r["score"],
+               "parent": r["parent_id"], "is_seed": r["parent_id"] is None} for r in rows]
+    return {"nodes": nodes}
+
+
 @app.get("/tasks/{task_id}/search")
-def search(task_id: str, q: str | None = Query(None),
-           type: str | None = Query(None), sort: str = Query("recent"),
-           agent: str | None = Query(None), since: str | None = Query(None),
-           limit: int = Query(20)):
+def search(task_id: str, q: str | None = Query(None), type: str | None = Query(None),
+           sort: str = Query("recent"), agent: str | None = Query(None),
+           since: str | None = Query(None), limit: int = Query(20)):
     with get_db() as conn:
         if not conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,)).fetchone():
             raise HTTPException(404, "task not found")
@@ -428,84 +425,44 @@ def search(task_id: str, q: str | None = Query(None),
 
         if "post" in search_types or "result" in search_types:
             where, params = ["p.task_id = %s"], [task_id]
-            if q:
-                where.append("(p.content ILIKE %s OR r.tldr ILIKE %s OR r.message ILIKE %s)")
-                params.extend([f"%{q}%"] * 3)
-            if agent:
-                where.append("p.agent_id = %s")
-                params.append(agent)
-            if since:
-                where.append("p.created_at > %s")
-                params.append(since)
-            if type == "post":
-                where.append("p.run_id IS NULL")
-            elif type == "result":
-                where.append("p.run_id IS NOT NULL")
+            if q: where.append("(p.content ILIKE %s OR r.tldr ILIKE %s OR r.message ILIKE %s)"); params.extend([f"%{q}%"] * 3)
+            if agent: where.append("p.agent_id = %s"); params.append(agent)
+            if since: where.append("p.created_at > %s"); params.append(since)
+            if type == "post": where.append("p.run_id IS NULL")
+            elif type == "result": where.append("p.run_id IS NOT NULL")
             params.append(limit)
-            rows = conn.execute(
-                f"SELECT p.*, r.score, r.tldr, r.branch FROM posts p"
-                f" LEFT JOIN runs r ON r.id = p.run_id"
-                f" WHERE {' AND '.join(where)}"
-                f" ORDER BY {'p.upvotes DESC' if sort == 'upvotes' else 'r.score DESC' if sort == 'score' else 'p.created_at DESC'}"
-                f" LIMIT %s", params
-            ).fetchall()
-            for row in rows:
+            _ord = 'p.upvotes DESC' if sort == 'upvotes' else 'r.score DESC' if sort == 'score' else 'p.created_at DESC'
+            for row in conn.execute(f"SELECT p.*, r.score, r.tldr, r.branch FROM posts p LEFT JOIN runs r ON r.id = p.run_id WHERE {' AND '.join(where)} ORDER BY {_ord} LIMIT %s", params).fetchall():
                 r = dict(row)
-                item = {"type": "result" if r.get("run_id") else "post",
-                        "id": r["id"], "agent_id": r["agent_id"],
-                        "content": r["content"], "upvotes": r["upvotes"],
-                        "created_at": r["created_at"]}
-                if r.get("run_id"):
-                    item["run_id"] = r["run_id"]
-                    item["score"] = r["score"]
-                    item["tldr"] = r["tldr"]
+                item = {"type": "result" if r.get("run_id") else "post", "id": r["id"],
+                        "agent_id": r["agent_id"], "content": r["content"], "upvotes": r["upvotes"], "created_at": r["created_at"]}
+                if r.get("run_id"): item["run_id"] = r["run_id"]; item["score"] = r["score"]; item["tldr"] = r["tldr"]
                 results.append(item)
 
         if "claim" in search_types:
             where, params = ["task_id = %s", "expires_at > %s"], [task_id, now()]
-            if q:
-                where.append("content ILIKE %s")
-                params.append(f"%{q}%")
-            if agent:
-                where.append("agent_id = %s")
-                params.append(agent)
+            if q: where.append("content ILIKE %s"); params.append(f"%{q}%")
+            if agent: where.append("agent_id = %s"); params.append(agent)
             params.append(limit)
-            rows = conn.execute(
-                f"SELECT * FROM claims WHERE {' AND '.join(where)}"
-                f" ORDER BY created_at DESC LIMIT %s", params
-            ).fetchall()
-            for row in rows:
+            for row in conn.execute(f"SELECT * FROM claims WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT %s", params).fetchall():
                 r = dict(row)
                 results.append({"type": "claim", "id": r["id"], "agent_id": r["agent_id"],
-                                "content": r["content"], "expires_at": r["expires_at"],
-                                "created_at": r["created_at"]})
+                                "content": r["content"], "expires_at": r["expires_at"], "created_at": r["created_at"]})
 
         if "skill" in search_types:
             where, params = ["task_id = %s"], [task_id]
-            if q:
-                where.append("(name ILIKE %s OR description ILIKE %s)")
-                params.extend([f"%{q}%"] * 2)
-            if agent:
-                where.append("agent_id = %s")
-                params.append(agent)
+            if q: where.append("(name ILIKE %s OR description ILIKE %s)"); params.extend([f"%{q}%"] * 2)
+            if agent: where.append("agent_id = %s"); params.append(agent)
             params.append(limit)
-            rows = conn.execute(
-                f"SELECT * FROM skills WHERE {' AND '.join(where)}"
-                f" ORDER BY {'upvotes DESC' if sort == 'upvotes' else 'created_at DESC'}"
-                f" LIMIT %s", params
-            ).fetchall()
-            for row in rows:
+            for row in conn.execute(f"SELECT * FROM skills WHERE {' AND '.join(where)} ORDER BY {'upvotes DESC' if sort == 'upvotes' else 'created_at DESC'} LIMIT %s", params).fetchall():
                 r = dict(row)
                 results.append({"type": "skill", "id": r["id"], "agent_id": r["agent_id"],
                                 "name": r["name"], "description": r["description"],
                                 "upvotes": r["upvotes"], "created_at": r["created_at"]})
 
-        if sort == "recent":
-            results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-        elif sort == "upvotes":
-            results.sort(key=lambda x: x.get("upvotes", 0), reverse=True)
-        elif sort == "score":
-            results.sort(key=lambda x: x.get("score") or 0, reverse=True)
+        if sort == "recent": results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        elif sort == "upvotes": results.sort(key=lambda x: x.get("upvotes", 0), reverse=True)
+        elif sort == "score": results.sort(key=lambda x: x.get("score") or 0, reverse=True)
 
     return {"results": results[:limit]}
 

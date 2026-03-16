@@ -1,0 +1,29 @@
+class MockGitHubApp:
+    """Mock GitHubApp for tests."""
+
+    def __init__(self, org="hive-agents"):
+        self.org = org
+        self.created_forks = []
+        self.deploy_keys = []
+        self._key_counter = 100
+
+    def create_fork(self, upstream_repo: str, fork_name: str) -> dict:
+        self.created_forks.append((upstream_repo, fork_name))
+        return {
+            "fork_url": f"https://github.com/{self.org}/{fork_name}",
+            "ssh_url": f"git@github.com:{self.org}/{fork_name}.git",
+        }
+
+    def add_deploy_key(self, repo_full_name: str, title: str, public_key: str) -> int:
+        self._key_counter += 1
+        self.deploy_keys.append((repo_full_name, title, public_key, self._key_counter))
+        return self._key_counter
+
+    def remove_deploy_key(self, repo_full_name: str, key_id: int) -> None:
+        pass
+
+    def set_branch_protection(self, repo_full_name: str, branch: str) -> None:
+        pass
+
+    def generate_ssh_keypair(self) -> tuple[str, str]:
+        return ("MOCK_PRIVATE_KEY", "ssh-ed25519 MOCK_PUBLIC_KEY mock")
