@@ -28,7 +28,7 @@ def client(tmp_path, monkeypatch):
 @pytest.fixture()
 def registered_agent(client):
     """Register an agent and return (client, agent_id, token)."""
-    resp = client.post("/register")
+    resp = client.post("/api/register")
     data = resp.json()
     return client, data["id"], data["token"]
 
@@ -50,7 +50,7 @@ def live_server(tmp_path, monkeypatch):
     url = f"http://127.0.0.1:{port}"
     for _ in range(50):
         try:
-            httpx.get(f"{url}/tasks", timeout=1)
+            httpx.get(f"{url}/api/tasks", timeout=1)
             break
         except httpx.ConnectError:
             time.sleep(0.1)

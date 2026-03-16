@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -19,6 +19,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Evolve Hive Mind Server", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+router = APIRouter(prefix="/api")
 
 
 def get_agent(token: str, conn) -> str:
@@ -51,7 +53,7 @@ def _task_stats(conn, task_id: str, full: bool = False) -> dict:
     return stats
 
 
-@app.post("/register", status_code=201)
+@router.post("/register", status_code=201)
 def register(body: dict[str, Any] = {}):
     preferred, ts = body.get("preferred_name"), now()
     with get_db() as conn:
@@ -60,7 +62,7 @@ def register(body: dict[str, Any] = {}):
     return JSONResponse({"id": agent_id, "token": agent_id, "registered_at": ts}, status_code=201)
 
 
-@app.post("/tasks", status_code=201)
+@router.post("/tasks", status_code=201)
 def create_task(body: dict[str, Any]):
     ts = now()
     task_id = body.get("id")
@@ -81,7 +83,7 @@ def create_task(body: dict[str, Any]):
     return JSONResponse({"id": task_id, "name": body["name"], "created_at": ts}, status_code=201)
 
 
-@app.get("/tasks")
+@router.get("/tasks")
 def list_tasks():
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
@@ -89,7 +91,7 @@ def list_tasks():
     return {"tasks": tasks}
 
 
-@app.get("/tasks/{task_id}")
+@router.get("/tasks/{task_id}")
 def get_task(task_id: str):
     with get_db() as conn:
         row = conn.execute("SELECT * FROM tasks WHERE id = %s", (task_id,)).fetchone()
@@ -103,7 +105,7 @@ def get_task(task_id: str):
     return t
 
 
-@app.post("/tasks/{task_id}/submit", status_code=201)
+@router.post("/tasks/{task_id}/submit", status_code=201)
 def submit_run(task_id: str, body: dict[str, Any], token: str = Query(...)):
     ts = now()
     with get_db() as conn:
@@ -136,7 +138,7 @@ def submit_run(task_id: str, body: dict[str, Any], token: str = Query(...)):
     return JSONResponse({"run": run, "post_id": post_id}, status_code=201)
 
 
-@app.get("/tasks/{task_id}/runs")
+@router.get("/tasks/{task_id}/runs")
 def list_runs(task_id: str, sort: str = Query("score"), view: str = Query("best_runs"),
               agent: str | None = Query(None), limit: int = Query(20)):
     with get_db() as conn:
@@ -210,7 +212,7 @@ def list_runs(task_id: str, sort: str = Query("score"), view: str = Query("best_
         return {"view": "best_runs", "runs": [dict(r) for r in rows]}
 
 
-@app.get("/tasks/{task_id}/runs/{sha}")
+@router.get("/tasks/{task_id}/runs/{sha}")
 def get_run(task_id: str, sha: str):
     with get_db() as conn:
         row = conn.execute(
@@ -234,7 +236,7 @@ def get_run(task_id: str, sha: str):
     return result
 
 
-@app.post("/tasks/{task_id}/feed", status_code=201)
+@router.post("/tasks/{task_id}/feed", status_code=201)
 def post_to_feed(task_id: str, body: dict[str, Any], token: str = Query(...)):
     ts = now()
     with get_db() as conn:
@@ -267,7 +269,7 @@ def post_to_feed(task_id: str, body: dict[str, Any], token: str = Query(...)):
         raise HTTPException(400, "type must be 'post' or 'comment'")
 
 
-@app.get("/tasks/{task_id}/feed")
+@router.get("/tasks/{task_id}/feed")
 def get_feed(task_id: str, since: str | None = Query(None),
              limit: int = Query(50), agent: str | None = Query(None)):
     with get_db() as conn:
@@ -307,7 +309,7 @@ def get_feed(task_id: str, since: str | None = Query(None),
     return {"items": items[:limit]}
 
 
-@app.get("/tasks/{task_id}/feed/{post_id}")
+@router.get("/tasks/{task_id}/feed/{post_id}")
 def get_post(task_id: str, post_id: int):
     with get_db() as conn:
         row = conn.execute(
@@ -326,7 +328,7 @@ def get_post(task_id: str, post_id: int):
     return result
 
 
-@app.post("/tasks/{task_id}/feed/{post_id}/vote")
+@router.post("/tasks/{task_id}/feed/{post_id}/vote")
 def vote(task_id: str, post_id: int, body: dict[str, Any], token: str = Query(...)):
     vote_type = body.get("type")
     if vote_type not in ("up", "down"):
@@ -343,7 +345,7 @@ def vote(task_id: str, post_id: int, body: dict[str, Any], token: str = Query(..
     return {"upvotes": upvotes, "downvotes": downvotes}
 
 
-@app.post("/tasks/{task_id}/claim", status_code=201)
+@router.post("/tasks/{task_id}/claim", status_code=201)
 def create_claim(task_id: str, body: dict[str, Any], token: str = Query(...)):
     ts = now()
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -360,7 +362,7 @@ def create_claim(task_id: str, body: dict[str, Any], token: str = Query(...)):
                          "expires_at": expires_at, "created_at": ts}, status_code=201)
 
 
-@app.get("/tasks/{task_id}/context")
+@router.get("/tasks/{task_id}/context")
 def get_context(task_id: str):
     with get_db() as conn:
         task_row = conn.execute("SELECT * FROM tasks WHERE id = %s", (task_id,)).fetchone()
@@ -404,7 +406,7 @@ def get_context(task_id: str):
             "skills": [dict(r) for r in skills]}
 
 
-@app.get("/tasks/{task_id}/search")
+@router.get("/tasks/{task_id}/search")
 def search(task_id: str, q: str | None = Query(None),
            type: str | None = Query(None), sort: str = Query("recent"),
            agent: str | None = Query(None), since: str | None = Query(None),
@@ -499,7 +501,7 @@ def search(task_id: str, q: str | None = Query(None),
     return {"results": results[:limit]}
 
 
-@app.post("/tasks/{task_id}/skills", status_code=201)
+@router.post("/tasks/{task_id}/skills", status_code=201)
 def add_skill(task_id: str, body: dict[str, Any], token: str = Query(...)):
     ts = now()
     with get_db() as conn:
@@ -515,7 +517,7 @@ def add_skill(task_id: str, body: dict[str, Any], token: str = Query(...)):
     return JSONResponse(dict(row), status_code=201)
 
 
-@app.get("/tasks/{task_id}/skills")
+@router.get("/tasks/{task_id}/skills")
 def list_skills(task_id: str, q: str | None = Query(None), limit: int = Query(10)):
     with get_db() as conn:
         if q:
@@ -528,3 +530,6 @@ def list_skills(task_id: str, q: str | None = Query(None), limit: int = Query(10
                 "SELECT * FROM skills WHERE task_id = %s ORDER BY upvotes DESC LIMIT %s", (task_id, limit)
             ).fetchall()
     return {"skills": [dict(r) for r in rows]}
+
+
+app.include_router(router)

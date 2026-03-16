@@ -5,53 +5,53 @@ import pytest
 
 class TestCreateTask:
     def test_create(self, client):
-        resp = client.post("/tasks", json={
+        resp = client.post("/api/tasks", json={
             "id": "gsm8k", "name": "GSM8K Solver", "repo_url": "https://github.com/test/gsm8k",
         })
         assert resp.status_code == 201
         assert resp.json()["id"] == "gsm8k"
 
     def test_duplicate(self, client):
-        client.post("/tasks", json={"id": "t1", "name": "T", "repo_url": "https://x"})
-        resp = client.post("/tasks", json={"id": "t1", "name": "T", "repo_url": "https://x"})
+        client.post("/api/tasks", json={"id": "t1", "name": "T", "repo_url": "https://x"})
+        resp = client.post("/api/tasks", json={"id": "t1", "name": "T", "repo_url": "https://x"})
         assert resp.status_code == 409
 
     def test_missing_fields(self, client):
-        assert client.post("/tasks", json={}).status_code == 400
-        assert client.post("/tasks", json={"id": "x"}).status_code == 400
-        assert client.post("/tasks", json={"id": "x", "name": "X"}).status_code == 400
+        assert client.post("/api/tasks", json={}).status_code == 400
+        assert client.post("/api/tasks", json={"id": "x"}).status_code == 400
+        assert client.post("/api/tasks", json={"id": "x", "name": "X"}).status_code == 400
 
 
 class TestRegister:
     def test_register(self, client):
-        resp = client.post("/register")
+        resp = client.post("/api/register")
         assert resp.status_code == 201
         data = resp.json()
         assert "id" in data
         assert data["token"] == data["id"]
 
     def test_register_preferred_name(self, client):
-        resp = client.post("/register", json={"preferred_name": "cool-bot"})
+        resp = client.post("/api/register", json={"preferred_name": "cool-bot"})
         assert resp.status_code == 201
         assert resp.json()["id"] == "cool-bot"
 
     def test_register_preferred_taken(self, client):
-        client.post("/register", json={"preferred_name": "taken"})
-        resp = client.post("/register", json={"preferred_name": "taken"})
+        client.post("/api/register", json={"preferred_name": "taken"})
+        resp = client.post("/api/register", json={"preferred_name": "taken"})
         assert resp.status_code == 201
         assert resp.json()["id"] != "taken"
 
 
 class TestListTasks:
     def test_empty(self, client):
-        resp = client.get("/tasks")
+        resp = client.get("/api/tasks")
         assert resp.status_code == 200
         assert resp.json()["tasks"] == []
 
 
 class TestGetTask:
     def test_not_found(self, client):
-        resp = client.get("/tasks/nope")
+        resp = client.get("/api/tasks/nope")
         assert resp.status_code == 404
 
 
@@ -59,7 +59,7 @@ class TestSubmitRun:
     def test_submit(self, registered_agent, _seed_task):
         client, agent_id, token = registered_agent
         resp = client.post(
-            "/tasks/t1/submit",
+            "/api/tasks/t1/submit",
             params={"token": token},
             json={"sha": "abc123", "message": "did stuff", "score": 0.5},
         )
@@ -71,13 +71,13 @@ class TestSubmitRun:
     def test_submit_no_sha(self, registered_agent, _seed_task):
         client, _, token = registered_agent
         resp = client.post(
-            "/tasks/t1/submit", params={"token": token}, json={"message": "hi"}
+            "/api/tasks/t1/submit", params={"token": token}, json={"message": "hi"}
         )
         assert resp.status_code == 400
 
     def test_submit_bad_token(self, client, _seed_task):
         resp = client.post(
-            "/tasks/t1/submit",
+            "/api/tasks/t1/submit",
             params={"token": "fake"},
             json={"sha": "x", "message": "hi"},
         )
@@ -86,7 +86,7 @@ class TestSubmitRun:
     def test_submit_task_not_found(self, registered_agent):
         client, _, token = registered_agent
         resp = client.post(
-            "/tasks/nope/submit",
+            "/api/tasks/nope/submit",
             params={"token": token},
             json={"sha": "x", "message": "hi"},
         )
@@ -96,80 +96,80 @@ class TestSubmitRun:
 class TestListRuns:
     def test_best_runs(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "s1", "message": "m", "score": 0.3})
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "s2", "message": "m", "score": 0.7})
-        resp = client.get("/tasks/t1/runs")
+        resp = client.get("/api/tasks/t1/runs")
         assert resp.status_code == 200
         runs = resp.json()["runs"]
         assert runs[0]["score"] >= runs[-1]["score"]
 
     def test_contributors_view(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "s3", "message": "m", "score": 0.5})
-        resp = client.get("/tasks/t1/runs", params={"view": "contributors"})
+        resp = client.get("/api/tasks/t1/runs", params={"view": "contributors"})
         assert resp.json()["view"] == "contributors"
 
     def test_deltas_view(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "p1", "message": "m", "score": 0.3})
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "c1", "message": "m", "score": 0.6, "parent_id": "p1"})
-        resp = client.get("/tasks/t1/runs", params={"view": "deltas"})
+        resp = client.get("/api/tasks/t1/runs", params={"view": "deltas"})
         assert resp.json()["view"] == "deltas"
 
     def test_improvers_view(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "i1", "message": "m", "score": 0.2})
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "i2", "message": "m", "score": 0.9})
-        resp = client.get("/tasks/t1/runs", params={"view": "improvers"})
+        resp = client.get("/api/tasks/t1/runs", params={"view": "improvers"})
         assert resp.json()["view"] == "improvers"
 
     def test_task_not_found(self, client):
-        resp = client.get("/tasks/nope/runs")
+        resp = client.get("/api/tasks/nope/runs")
         assert resp.status_code == 404
 
 
 class TestGetRun:
     def test_get(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "r1", "message": "m", "score": 0.5})
-        resp = client.get("/tasks/t1/runs/r1")
+        resp = client.get("/api/tasks/t1/runs/r1")
         assert resp.status_code == 200
         assert resp.json()["id"] == "r1"
 
     def test_not_found(self, client):
-        resp = client.get("/tasks/t1/runs/nope")
+        resp = client.get("/api/tasks/t1/runs/nope")
         assert resp.status_code == 404
 
 
 class TestFeed:
     def test_post_and_read(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/feed", params={"token": token},
+        client.post("/api/tasks/t1/feed", params={"token": token},
                      json={"type": "post", "content": "hello"})
-        resp = client.get("/tasks/t1/feed")
+        resp = client.get("/api/tasks/t1/feed")
         assert resp.status_code == 200
         items = resp.json()["items"]
         assert any(i["content"] == "hello" for i in items)
 
     def test_comment(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        post = client.post("/tasks/t1/feed", params={"token": token},
+        post = client.post("/api/tasks/t1/feed", params={"token": token},
                             json={"type": "post", "content": "hi"}).json()
-        resp = client.post("/tasks/t1/feed", params={"token": token},
+        resp = client.post("/api/tasks/t1/feed", params={"token": token},
                             json={"type": "comment", "parent_id": post["id"], "content": "reply"})
         assert resp.status_code == 201
 
     def test_bad_type(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        resp = client.post("/tasks/t1/feed", params={"token": token},
+        resp = client.post("/api/tasks/t1/feed", params={"token": token},
                             json={"type": "invalid"})
         assert resp.status_code == 400
 
@@ -177,16 +177,16 @@ class TestFeed:
 class TestVote:
     def test_upvote(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        post = client.post("/tasks/t1/feed", params={"token": token},
+        post = client.post("/api/tasks/t1/feed", params={"token": token},
                             json={"type": "post", "content": "x"}).json()
-        resp = client.post(f"/tasks/t1/feed/{post['id']}/vote",
+        resp = client.post(f"/api/tasks/t1/feed/{post['id']}/vote",
                             params={"token": token}, json={"type": "up"})
         assert resp.status_code == 200
         assert resp.json()["upvotes"] == 1
 
     def test_bad_vote(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        resp = client.post("/tasks/t1/feed/1/vote",
+        resp = client.post("/api/tasks/t1/feed/1/vote",
                             params={"token": token}, json={"type": "invalid"})
         assert resp.status_code == 400
 
@@ -194,7 +194,7 @@ class TestVote:
 class TestClaim:
     def test_create(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        resp = client.post("/tasks/t1/claim", params={"token": token},
+        resp = client.post("/api/tasks/t1/claim", params={"token": token},
                             json={"content": "working on X"})
         assert resp.status_code == 201
         assert "expires_at" in resp.json()
@@ -203,7 +203,7 @@ class TestClaim:
 class TestContext:
     def test_get(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        resp = client.get("/tasks/t1/context")
+        resp = client.get("/api/tasks/t1/context")
         assert resp.status_code == 200
         data = resp.json()
         assert "task" in data
@@ -211,39 +211,39 @@ class TestContext:
         assert "feed" in data
 
     def test_not_found(self, client):
-        resp = client.get("/tasks/nope/context")
+        resp = client.get("/api/tasks/nope/context")
         assert resp.status_code == 404
 
 
 class TestSkills:
     def test_add_and_list(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        resp = client.post("/tasks/t1/skills", params={"token": token},
+        resp = client.post("/api/tasks/t1/skills", params={"token": token},
                             json={"name": "retry", "description": "retry logic",
                                   "code_snippet": "while True: pass"})
         assert resp.status_code == 201
-        resp = client.get("/tasks/t1/skills")
+        resp = client.get("/api/tasks/t1/skills")
         assert len(resp.json()["skills"]) == 1
 
     def test_search(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/skills", params={"token": token},
+        client.post("/api/tasks/t1/skills", params={"token": token},
                      json={"name": "retry", "description": "retry logic",
                            "code_snippet": "code"})
-        resp = client.get("/tasks/t1/skills", params={"q": "retry"})
+        resp = client.get("/api/tasks/t1/skills", params={"q": "retry"})
         assert len(resp.json()["skills"]) == 1
-        resp = client.get("/tasks/t1/skills", params={"q": "zzzzz"})
+        resp = client.get("/api/tasks/t1/skills", params={"q": "zzzzz"})
         assert len(resp.json()["skills"]) == 0
 
 
 class TestSearch:
     def test_search_posts(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/feed", params={"token": token},
+        client.post("/api/tasks/t1/feed", params={"token": token},
                      json={"type": "post", "content": "chain-of-thought helps"})
-        client.post("/tasks/t1/feed", params={"token": token},
+        client.post("/api/tasks/t1/feed", params={"token": token},
                      json={"type": "post", "content": "majority voting is better"})
-        resp = client.get("/tasks/t1/search", params={"q": "chain"})
+        resp = client.get("/api/tasks/t1/search", params={"q": "chain"})
         assert resp.status_code == 200
         results = resp.json()["results"]
         assert len(results) == 1
@@ -251,34 +251,34 @@ class TestSearch:
 
     def test_filter_by_type(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/feed", params={"token": token},
+        client.post("/api/tasks/t1/feed", params={"token": token},
                      json={"type": "post", "content": "an insight"})
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "s1", "message": "a run", "score": 0.5})
-        resp = client.get("/tasks/t1/search", params={"type": "post"})
+        resp = client.get("/api/tasks/t1/search", params={"type": "post"})
         results = resp.json()["results"]
         assert all(r["type"] == "post" for r in results)
-        resp = client.get("/tasks/t1/search", params={"type": "result"})
+        resp = client.get("/api/tasks/t1/search", params={"type": "result"})
         results = resp.json()["results"]
         assert all(r["type"] == "result" for r in results)
 
     def test_sort_by_score(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "lo", "message": "m", "score": 0.3})
-        client.post("/tasks/t1/submit", params={"token": token},
+        client.post("/api/tasks/t1/submit", params={"token": token},
                      json={"sha": "hi", "message": "m", "score": 0.9})
-        resp = client.get("/tasks/t1/search", params={"type": "result", "sort": "score"})
+        resp = client.get("/api/tasks/t1/search", params={"type": "result", "sort": "score"})
         results = resp.json()["results"]
         assert results[0]["score"] >= results[-1]["score"]
 
     def test_no_results(self, registered_agent, _seed_task):
         client, _, token = registered_agent
-        resp = client.get("/tasks/t1/search", params={"q": "nonexistent_xyz"})
+        resp = client.get("/api/tasks/t1/search", params={"q": "nonexistent_xyz"})
         assert resp.json()["results"] == []
 
     def test_task_not_found(self, client):
-        resp = client.get("/tasks/nope/search", params={"q": "x"})
+        resp = client.get("/api/tasks/nope/search", params={"q": "x"})
         assert resp.status_code == 404
 
 

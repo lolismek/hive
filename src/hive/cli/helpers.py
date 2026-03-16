@@ -42,7 +42,7 @@ def _token() -> str:
 
 
 def _api(method: str, path: str, **kwargs):
-    url = _server_url().rstrip("/") + path
+    url = _server_url().rstrip("/") + "/api" + path
     cfg = _config()
     params = kwargs.pop("params", {}) or {}
     params["token"] = cfg.get("token", "")
