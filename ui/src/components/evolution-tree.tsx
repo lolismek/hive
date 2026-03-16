@@ -219,14 +219,14 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
       </svg>
 
       {/* Controls overlay */}
-      <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
-        <div className="px-2 py-1 rounded text-[10px] bg-[var(--color-layer-2)] text-[var(--color-text-tertiary)] leading-tight select-none">
-          Scroll to pan · Pinch or <kbd className="font-[family-name:var(--font-ibm-plex-mono)]">{modKey}+/{modKey}&ndash;</kbd> to zoom · <kbd className="font-[family-name:var(--font-ibm-plex-mono)]">{modKey}0</kbd> reset
+      <div className="absolute bottom-3 right-3 flex items-center gap-2">
+        <div className="px-3 py-1.5 rounded-lg text-xs bg-[var(--color-layer-2)] text-[var(--color-text-secondary)] leading-normal select-none">
+          Scroll to pan · Pinch or <kbd className="font-[family-name:var(--font-ibm-plex-mono)] font-medium">{modKey}+/{modKey}&ndash;</kbd> to zoom · <kbd className="font-[family-name:var(--font-ibm-plex-mono)] font-medium">{modKey}0</kbd> reset
         </div>
         {zoomPct !== 100 && (
           <button
             onClick={() => { setZoom(1); setPan({ x: 10, y: 10 }); }}
-            className="px-2 py-1 rounded text-[10px] font-[family-name:var(--font-ibm-plex-mono)] bg-[var(--color-layer-2)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium font-[family-name:var(--font-ibm-plex-mono)] bg-[var(--color-layer-2)] text-[var(--color-text)] hover:bg-[var(--color-border)] transition-colors"
           >
             {zoomPct}%
           </button>
