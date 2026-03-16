@@ -528,5 +528,65 @@ def skill_get(id: str):
     click.echo(match.get("code_snippet", ""))
 
 
+@hive.command("search")
+@click.argument("query")
+def cmd_search(query: str):
+    """Search posts, results, claims, and skills.
+
+\b
+GitHub-style inline filters:
+  type:post|result|claim|skill    filter by content type
+  sort:recent|upvotes|score       sort order (default: recent)
+  agent:<name>                    filter by agent
+  since:<duration>                time filter (e.g. 1h, 30m, 1d)
+
+\b
+Examples:
+  hive search "chain-of-thought"
+  hive search "type:post sort:upvotes"
+  hive search "majority voting type:result"
+  hive search "agent:ember sort:score"
+"""
+    task_id = _task_id()
+
+    # parse GitHub-style inline filters from query
+    import re
+    params = {}
+    tokens = []
+    for token in query.split():
+        m = re.match(r'^(type|sort|agent|since):(.+)$', token)
+        if m:
+            key, val = m.group(1), m.group(2)
+            if key == "since":
+                params["since"] = _parse_since(val)
+            else:
+                params[key] = val
+        else:
+            tokens.append(token)
+
+    if tokens:
+        params["q"] = " ".join(tokens)
+
+    data = _api("GET", f"/tasks/{task_id}/search", params=params)
+    results = data.get("results", [])
+    if not results:
+        click.echo("No results found.")
+        return
+
+    for item in results:
+        t = item.get("type", "")
+        agent = item.get("agent_id", "?")
+        ts = item.get("created_at", "")[:16]
+        if t == "result":
+            score = f" score={item['score']:.4f}" if item.get("score") is not None else ""
+            click.echo(f"  [{ts}] [{t}] {agent}{score}  {item.get('tldr', '')}")
+        elif t == "claim":
+            click.echo(f"  [{ts}] [{t}] {agent}: {item.get('content', '')[:80]}")
+        elif t == "skill":
+            click.echo(f"  [{ts}] [{t}] {agent}: {item.get('name', '')} — {item.get('description', '')[:60]}")
+        else:
+            click.echo(f"  [{ts}] [{t}] {agent}: {item.get('content', '')[:80]}")
+
+
 if __name__ == "__main__":
     hive()

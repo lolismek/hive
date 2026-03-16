@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db, get_db, now
 from .names import generate_name, generate_name_with_preference
@@ -17,6 +18,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Evolve Hive Mind Server", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def get_agent(token: str, conn) -> str:
@@ -373,6 +382,101 @@ def get_context(task_id: str):
     return {"task": t, "leaderboard": [dict(r) for r in leaderboard],
             "active_claims": [dict(r) for r in active_claims], "feed": feed,
             "skills": [dict(r) for r in skills]}
+
+
+@app.get("/tasks/{task_id}/search")
+def search(task_id: str, q: str | None = Query(None),
+           type: str | None = Query(None), sort: str = Query("recent"),
+           agent: str | None = Query(None), since: str | None = Query(None),
+           limit: int = Query(20)):
+    with get_db() as conn:
+        if not conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone():
+            raise HTTPException(404, "task not found")
+        results = []
+        search_types = [type] if type else ["post", "result", "claim", "skill"]
+
+        if "post" in search_types or "result" in search_types:
+            where, params = ["p.task_id = ?"], [task_id]
+            if q:
+                where.append("(p.content LIKE ? OR r.tldr LIKE ? OR r.message LIKE ?)")
+                params.extend([f"%{q}%"] * 3)
+            if agent:
+                where.append("p.agent_id = ?")
+                params.append(agent)
+            if since:
+                where.append("p.created_at > ?")
+                params.append(since)
+            if type == "post":
+                where.append("p.run_id IS NULL")
+            elif type == "result":
+                where.append("p.run_id IS NOT NULL")
+            params.append(limit)
+            rows = conn.execute(
+                f"SELECT p.*, r.score, r.tldr, r.branch FROM posts p"
+                f" LEFT JOIN runs r ON r.id = p.run_id"
+                f" WHERE {' AND '.join(where)}"
+                f" ORDER BY {'p.upvotes DESC' if sort == 'upvotes' else 'r.score DESC' if sort == 'score' else 'p.created_at DESC'}"
+                f" LIMIT ?", params
+            ).fetchall()
+            for row in rows:
+                r = dict(row)
+                item = {"type": "result" if r.get("run_id") else "post",
+                        "id": r["id"], "agent_id": r["agent_id"],
+                        "content": r["content"], "upvotes": r["upvotes"],
+                        "created_at": r["created_at"]}
+                if r.get("run_id"):
+                    item["run_id"] = r["run_id"]
+                    item["score"] = r["score"]
+                    item["tldr"] = r["tldr"]
+                results.append(item)
+
+        if "claim" in search_types:
+            where, params = ["task_id = ?", "expires_at > ?"], [task_id, now()]
+            if q:
+                where.append("content LIKE ?")
+                params.append(f"%{q}%")
+            if agent:
+                where.append("agent_id = ?")
+                params.append(agent)
+            params.append(limit)
+            rows = conn.execute(
+                f"SELECT * FROM claims WHERE {' AND '.join(where)}"
+                f" ORDER BY created_at DESC LIMIT ?", params
+            ).fetchall()
+            for row in rows:
+                r = dict(row)
+                results.append({"type": "claim", "id": r["id"], "agent_id": r["agent_id"],
+                                "content": r["content"], "expires_at": r["expires_at"],
+                                "created_at": r["created_at"]})
+
+        if "skill" in search_types:
+            where, params = ["task_id = ?"], [task_id]
+            if q:
+                where.append("(name LIKE ? OR description LIKE ?)")
+                params.extend([f"%{q}%"] * 2)
+            if agent:
+                where.append("agent_id = ?")
+                params.append(agent)
+            params.append(limit)
+            rows = conn.execute(
+                f"SELECT * FROM skills WHERE {' AND '.join(where)}"
+                f" ORDER BY {'upvotes DESC' if sort == 'upvotes' else 'created_at DESC'}"
+                f" LIMIT ?", params
+            ).fetchall()
+            for row in rows:
+                r = dict(row)
+                results.append({"type": "skill", "id": r["id"], "agent_id": r["agent_id"],
+                                "name": r["name"], "description": r["description"],
+                                "upvotes": r["upvotes"], "created_at": r["created_at"]})
+
+        if sort == "recent":
+            results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        elif sort == "upvotes":
+            results.sort(key=lambda x: x.get("upvotes", 0), reverse=True)
+        elif sort == "score":
+            results.sort(key=lambda x: x.get("score") or 0, reverse=True)
+
+    return {"results": results[:limit]}
 
 
 @app.post("/tasks/{task_id}/skills", status_code=201)
