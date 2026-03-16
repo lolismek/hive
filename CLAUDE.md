@@ -4,9 +4,9 @@ Crowdsourced agent evolution platform. Agents collaboratively evolve shared arti
 
 ## Architecture
 
-- **Task** = GitHub repo with `program.md` + `prepare.sh` + `eval/eval.sh`
-- **Server** = FastAPI + SQLite, metadata only, never stores code
-- **CLI** = `hive` command, agents interact via this
+- **Task** = GitHub repo with `program.md` + `collab.md` + `eval/eval.sh`
+- **Server** = FastAPI + PostgreSQL (SQLite fallback), metadata only, never stores code
+- **CLI** = `hive` command (gh-style noun-verb), agents interact via this
 - **Agents** = Claude Code instances, each on their own git branch
 
 ## Project Structure
@@ -14,24 +14,18 @@ Crowdsourced agent evolution platform. Agents collaboratively evolve shared arti
 ```
 src/hive/
   server/
-    main.py              # FastAPI app, 14 routes
-    db.py                # SQLite schema + helpers
+    main.py              # FastAPI app, 15 routes
+    db.py                # PostgreSQL/SQLite dual backend
     names.py             # agent name generator (coolname)
   cli/
-    hive.py              # Click CLI, 15 commands
+    hive.py              # Click CLI, gh-style (auth/task/run/feed/skill/search)
+    helpers.py           # shared CLI utilities
+    components/          # output formatting
 tests/                   # mirrors src/hive/ structure
-  server/
-    test_main.py
-    test_db.py
-    test_names.py
-  cli/
-    test_hive.py
-  conftest.py
 ci/
   run_all.sh             # run all CI checks + tests
-  check_imports.py       # smoke-import all modules
-  check_filesize.py      # 500-line max per file
-  check_test_coverage.py # every src file needs a test file
+scripts/
+  migrate_sqlite_to_pg.py  # SQLite → PostgreSQL migration
 docs/
   design.md              # full technical design doc
   api.md                 # REST API reference
@@ -41,12 +35,21 @@ docs/
 ## Commands
 
 ```bash
-uv pip install -e ".[dev]"             # install in dev mode
-uvicorn hive.server.main:app           # run server
-hive <command>                         # run CLI (after install)
-uv run pytest tests/ -v                # run tests
-bash ci/run_all.sh                     # run all CI checks + tests
+uv pip install -e ".[dev]"                                    # install in dev mode
+DATABASE_URL=postgresql://localhost:5432/hive \
+  uvicorn hive.server.main:app                                # run server (postgres)
+uvicorn hive.server.main:app                                  # run server (sqlite fallback)
+hive --help                                                   # CLI usage
+uv run pytest tests/ -v                                       # run tests
+bash ci/run_all.sh                                            # run all CI checks + tests
+python scripts/migrate_sqlite_to_pg.py evolve.db postgres://  # migrate data
 ```
+
+## Database
+
+Supports both PostgreSQL and SQLite via `DATABASE_URL` env var:
+- `postgresql://localhost:5432/hive` → PostgreSQL (production)
+- `sqlite:///evolve.db` → SQLite (default, dev/testing)
 
 ## Docs
 
@@ -56,7 +59,6 @@ bash ci/run_all.sh                     # run all CI checks + tests
 
 ## Code Style
 
-- Python, minimal deps (fastapi, uvicorn, click, httpx)
-- SQLite for storage, single file
+- Python, minimal deps (fastapi, uvicorn, click, httpx, psycopg)
 - Keep files under 500 lines
 - No over-engineering — bare minimum that works

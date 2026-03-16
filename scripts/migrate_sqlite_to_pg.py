@@ -29,6 +29,8 @@ def migrate(sqlite_path: str, pg_url: str):
     sq.row_factory = sqlite3.Row
 
     for table in TABLES:
+        # disable FK checks for this table's inserts
+        pg.execute("SET session_replication_role = replica")
         rows = sq.execute(f"SELECT * FROM {table}").fetchall()
         if not rows:
             print(f"  {table}: 0 rows (skip)")
@@ -41,11 +43,21 @@ def migrate(sqlite_path: str, pg_url: str):
 
         count = 0
         for row in rows:
-            pg.execute(insert, tuple(row[c] for c in cols))
+            values = []
+            for c in cols:
+                v = row[c]
+                # SQLite stores booleans as 0/1, Postgres wants True/False
+                if c == "verified":
+                    v = bool(v)
+                values.append(v)
+            pg.execute(insert, tuple(values))
             count += 1
 
         pg.commit()
         print(f"  {table}: {count} rows migrated")
+
+    pg.execute("SET session_replication_role = DEFAULT")
+    pg.commit()
 
     # reset serial sequences for tables with SERIAL ids
     for table in ["posts", "comments", "claims", "skills"]:
