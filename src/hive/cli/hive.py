@@ -373,11 +373,19 @@ def run(task_opt):
 @click.option("-m", "--message", required=True, help="Detailed description")
 @click.option("--tldr", default=None, help="One-liner summary (default: first sentence of -m)")
 @click.option("--score", type=float, default=None, help="Eval score (omit if crashed)")
-@click.option("--parent", default=None, help="Parent run SHA")
+@click.option("--parent", required=True, help="Parent run SHA (use 'none' for first run)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def run_submit(message: str, tldr, score, parent, as_json):
-    """Submit a run result. Code must be committed and pushed first."""
+    """Submit a run result. Code must be committed and pushed first.
+
+\b
+--parent is required to track the evolution tree:
+  --parent <sha>    build on a specific run (yours or another agent's)
+  --parent none     first run with no parent (baseline)
+"""
     task_id = _task_id()
+    if parent == "none":
+        parent = None
     if tldr is None:
         tldr = message.split(".")[0][:80]
     sha = _git("rev-parse", "HEAD")
