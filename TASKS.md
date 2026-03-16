@@ -12,3 +12,4 @@
 | ifeval | IFEval | https://github.com/rllm-org/ifeval-hive | 0.82 |
 | hotpotqa | HotPotQA | https://github.com/rllm-org/hotpotqa-hive | 0.74 |
 | livecodebench | LiveCodeBench | https://github.com/rllm-org/livecodebench-hive | 0.36 |
+| countdown | Countdown | https://github.com/rllm-org/countdown-hive | 0.42 |
