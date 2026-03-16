@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -61,21 +61,24 @@ def register(body: dict[str, Any] = {}):
 
 
 @app.post("/tasks", status_code=201)
-def create_task(body: dict[str, Any]):
+def create_task(
+    archive: UploadFile = File(...),
+    id: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(...),
+    config: str | None = Form(None),
+):
     ts = now()
-    task_id = body.get("id")
-    if not task_id: raise HTTPException(400, "id required")
-    if not body.get("name"): raise HTTPException(400, "name required")
-    if not body.get("repo_url"): raise HTTPException(400, "repo_url required")
     with get_db() as conn:
-        if conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,)).fetchone():
+        if conn.execute("SELECT id FROM tasks WHERE id = %s", (id,)).fetchone():
             raise HTTPException(409, "task already exists")
-        config = json.dumps(body["config"]) if body.get("config") else None
+        gh = get_github_app()
+        repo_url = gh.create_task_repo(id, archive.file.read(), description)
         conn.execute(
             "INSERT INTO tasks (id, name, description, repo_url, config, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
-            (task_id, body["name"], body.get("description", ""), body["repo_url"], config, ts),
+            (id, name, description, repo_url, config, ts),
         )
-    return JSONResponse({"id": task_id, "name": body["name"], "created_at": ts}, status_code=201)
+    return JSONResponse({"id": id, "name": name, "repo_url": repo_url, "created_at": ts}, status_code=201)
 
 
 @app.get("/tasks")
@@ -461,10 +464,9 @@ def search(task_id: str, q: str | None = Query(None), type: str | None = Query(N
                                 "name": r["name"], "description": r["description"],
                                 "upvotes": r["upvotes"], "created_at": r["created_at"]})
 
-        if sort == "recent": results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-        elif sort == "upvotes": results.sort(key=lambda x: x.get("upvotes", 0), reverse=True)
-        elif sort == "score": results.sort(key=lambda x: x.get("score") or 0, reverse=True)
-
+        sort_keys = {"recent": ("created_at", ""), "upvotes": ("upvotes", 0), "score": ("score", 0)}
+        if sort in sort_keys:
+            k, d = sort_keys[sort]; results.sort(key=lambda x: x.get(k) or d, reverse=True)
     return {"results": results[:limit]}
 
 
@@ -488,12 +490,9 @@ def add_skill(task_id: str, body: dict[str, Any], token: str = Query(...)):
 def list_skills(task_id: str, q: str | None = Query(None), limit: int = Query(10)):
     with get_db() as conn:
         if q:
-            rows = conn.execute(
-                "SELECT * FROM skills WHERE task_id = %s AND (name ILIKE %s OR description ILIKE %s)"
-                " ORDER BY upvotes DESC LIMIT %s", (task_id, f"%{q}%", f"%{q}%", limit)
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM skills WHERE task_id = %s AND (name ILIKE %s OR description ILIKE %s)"
+                " ORDER BY upvotes DESC LIMIT %s", (task_id, f"%{q}%", f"%{q}%", limit)).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT * FROM skills WHERE task_id = %s ORDER BY upvotes DESC LIMIT %s", (task_id, limit)
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM skills WHERE task_id = %s ORDER BY upvotes DESC LIMIT %s",
+                (task_id, limit)).fetchall()
     return {"skills": [dict(r) for r in rows]}

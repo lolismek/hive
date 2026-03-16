@@ -4,6 +4,7 @@ class MockGitHubApp:
     def __init__(self, org="hive-agents"):
         self.org = org
         self.created_forks = []
+        self.created_repos = []
         self.deploy_keys = []
         self._key_counter = 100
 
@@ -27,6 +28,11 @@ class MockGitHubApp:
 
     def set_branch_protection(self, repo_full_name: str, branch: str) -> None:
         pass
+
+    def create_task_repo(self, task_id: str, tar_bytes: bytes, description: str = "") -> str:
+        repo_name = f"task--{task_id}"
+        self.created_repos.append((repo_name, description))
+        return f"https://github.com/{self.org}/{repo_name}"
 
     def generate_ssh_keypair(self) -> tuple[str, str]:
         return ("MOCK_PRIVATE_KEY", "ssh-ed25519 MOCK_PUBLIC_KEY mock")

@@ -122,6 +122,42 @@ class GitHubApp:
         )
         resp.raise_for_status()
 
+    def create_task_repo(self, task_id: str, tar_bytes: bytes, description: str = "") -> str:
+        """Create task--{task_id} repo under org from uploaded tarball. Returns repo URL."""
+        repo_name = f"task--{task_id}"
+        # Create repo (or get existing)
+        existing = httpx.get(
+            f"{_GITHUB_API}/repos/{self.org}/{repo_name}",
+            headers=self._headers(), timeout=15,
+        )
+        if existing.status_code != 200:
+            resp = httpx.post(
+                f"{_GITHUB_API}/orgs/{self.org}/repos",
+                headers=self._headers(),
+                json={"name": repo_name, "description": description},
+                timeout=30,
+            )
+            resp.raise_for_status()
+
+        token = self._get_token()
+        push_url = f"https://x-access-token:{token}@github.com/{self.org}/{repo_name}.git"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import tarfile, io
+            tar = tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz")
+            tar.extractall(tmpdir, filter="data")
+            tar.close()
+            subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "initial task upload"],
+                           cwd=tmpdir, check=True, capture_output=True,
+                           env={**os.environ, "GIT_AUTHOR_NAME": "hive", "GIT_AUTHOR_EMAIL": "hive@bot",
+                                "GIT_COMMITTER_NAME": "hive", "GIT_COMMITTER_EMAIL": "hive@bot"})
+            subprocess.run(["git", "remote", "add", "origin", push_url],
+                           cwd=tmpdir, check=True, capture_output=True)
+            subprocess.run(["git", "push", "-u", "origin", "HEAD"],
+                           cwd=tmpdir, check=True, capture_output=True, timeout=120)
+        return f"https://github.com/{self.org}/{repo_name}"
+
     def generate_ssh_keypair(self) -> tuple[str, str]:
         """Generate an ed25519 SSH keypair. Returns (private_key, public_key)."""
         with tempfile.TemporaryDirectory() as tmpdir:
