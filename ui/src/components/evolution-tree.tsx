@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Run } from "@/types/api";
 import { getAgentColor } from "@/lib/agent-colors";
 import { buildTree, layoutTree } from "@/lib/tree-layout";
+import { resolveRun, buildRunMap } from "@/lib/run-utils";
 
 interface EvolutionTreeProps {
   runs: Run[];
@@ -15,23 +16,30 @@ const NODE_H = 68;
 const GAP_X = 28;
 const GAP_Y = 56;
 
-function getBestLineage(runs: Run[]): Set<string> {
-  const lineage = new Set<string>();
-  if (runs.length === 0) return lineage;
+function getBestLineage(runs: Run[]): { ids: Set<string>; chains: Set<string>[] } {
+  if (runs.length === 0) return { ids: new Set(), chains: [] };
 
   const scored = runs.filter((r) => r.score !== null);
-  if (scored.length === 0) return lineage;
+  if (scored.length === 0) return { ids: new Set(), chains: [] };
 
-  const best = scored.reduce((a, b) => (a.score! >= b.score! ? a : b));
-  const byId = new Map(runs.map((r) => [r.id, r]));
+  const bestScore = Math.max(...scored.map((r) => r.score!));
+  const winners = scored.filter((r) => r.score === bestScore);
+  const byId = buildRunMap(runs);
+  const ids = new Set<string>();
+  const chains: Set<string>[] = [];
 
-  let current: Run | undefined = best;
-  while (current) {
-    lineage.add(current.id);
-    current = current.parent_id ? byId.get(current.parent_id) : undefined;
+  for (const winner of winners) {
+    const chain = new Set<string>();
+    let current: Run | undefined = winner;
+    while (current) {
+      ids.add(current.id);
+      chain.add(current.id);
+      current = current.parent_id ? resolveRun(current.parent_id, byId) : undefined;
+    }
+    chains.push(chain);
   }
 
-  return lineage;
+  return { ids, chains };
 }
 
 export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
@@ -40,11 +48,11 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
     return layoutTree(roots, NODE_W, NODE_H, GAP_X, GAP_Y);
   }, [runs]);
 
-  const bestLineage = useMemo(() => getBestLineage(runs), [runs]);
+  const { ids: bestLineage, chains: bestChains } = useMemo(() => getBestLineage(runs), [runs]);
 
   return (
-    <div className="overflow-x-auto overflow-y-auto h-full w-full flex items-start justify-center">
-      <svg width={width} height={height}>
+    <div className="overflow-auto h-full w-full">
+      <svg width={width} height={height} className="mx-auto block">
         <g transform="translate(10, 10)">
           {/* Edges */}
           {edges.map((e, i) => {
@@ -53,7 +61,7 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
             const x2 = e.child.x + NODE_W / 2;
             const y2 = e.child.y;
             const my = (y1 + y2) / 2;
-            const inLineage = bestLineage.has(e.parent.run.id) && bestLineage.has(e.child.run.id);
+            const inLineage = bestChains.some((c) => c.has(e.parent.run.id) && c.has(e.child.run.id));
             return (
               <path key={i} d={`M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`}
                 fill="none"

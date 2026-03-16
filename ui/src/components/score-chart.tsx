@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { ResponsiveLine } from "@nivo/line";
 import { Run } from "@/types/api";
 import { getAgentColor } from "@/lib/agent-colors";
+import { resolveRun, resolveId, buildRunMap } from "@/lib/run-utils";
 
 interface ScoreChartProps {
   runs: Run[];
@@ -17,21 +18,28 @@ function relativeTime(iso: string) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function findBestLineage(runs: Run[]): Set<string> {
-  const runMap = new Map<string, Run>();
-  for (const r of runs) runMap.set(r.id, r);
-  let best: Run | null = null;
-  for (const r of runs) {
-    if (r.score !== null && (!best || r.score > best.score!)) best = r;
+function findBestLineage(runs: Run[]): { ids: Set<string>; chains: Set<string>[] } {
+  const runMap = buildRunMap(runs);
+  const scored = runs.filter((r) => r.score !== null);
+  if (scored.length === 0) return { ids: new Set(), chains: [] };
+
+  const bestScore = Math.max(...scored.map((r) => r.score!));
+  const winners = scored.filter((r) => r.score === bestScore);
+  const ids = new Set<string>();
+  const chains: Set<string>[] = [];
+
+  for (const winner of winners) {
+    const chain = new Set<string>();
+    let current: Run | undefined = winner;
+    while (current) {
+      ids.add(current.id);
+      chain.add(current.id);
+      current = current.parent_id ? resolveRun(current.parent_id, runMap) : undefined;
+    }
+    chains.push(chain);
   }
-  if (!best) return new Set();
-  const lineage = new Set<string>();
-  let current: Run | undefined = best;
-  while (current) {
-    lineage.add(current.id);
-    current = current.parent_id ? runMap.get(current.parent_id) : undefined;
-  }
-  return lineage;
+
+  return { ids, chains };
 }
 
 interface PointData {
@@ -43,11 +51,11 @@ interface PointData {
 export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
   const [hoveredRun, setHoveredRun] = React.useState<{ run: Run; x: number; y: number } | null>(null);
 
-  const { lineData, allPoints, edges, yMin, yMax, xMax } = useMemo(() => {
+  const { lineData, allPoints, edges, lineageChains, yMin, yMax, xMax } = useMemo(() => {
     const scored = runs
       .filter((r) => r.score !== null)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    const lineageIds = findBestLineage(scored);
+    const { ids: lineageIds, chains: lineageChains } = findBestLineage(scored);
 
     const linePoints = scored
       .filter((r) => lineageIds.has(r.id))
@@ -66,12 +74,15 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
     // Collect all parent→child edges (both runs must have scores)
     const edges: { parentIdx: number; childIdx: number; isBestLineage: boolean }[] = [];
     for (const run of scored) {
-      if (run.parent_id && idxMap.has(run.parent_id)) {
-        edges.push({
-          parentIdx: idxMap.get(run.parent_id)!,
-          childIdx: idxMap.get(run.id)!,
-          isBestLineage: lineageIds.has(run.id) && lineageIds.has(run.parent_id),
-        });
+      if (run.parent_id) {
+        const parentFullId = resolveId(run.parent_id, idxMap.keys());
+        if (parentFullId !== undefined) {
+          edges.push({
+            parentIdx: idxMap.get(parentFullId)!,
+            childIdx: idxMap.get(run.id)!,
+            isBestLineage: lineageChains.some((c) => c.has(run.id) && c.has(parentFullId)),
+          });
+        }
       }
     }
 
@@ -82,6 +93,7 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
       lineData: [{ id: "lineage", data: linePoints }],
       allPoints,
       edges,
+      lineageChains,
       yMin: Math.min(...allScores) - range * 0.05,
       yMax: Math.max(...allScores) + range * 0.05,
       xMax: scored.length - 1,
@@ -109,26 +121,29 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const StringLayer = ({ xScale, yScale }: any) => {
-    const lineagePoints = allPoints
-      .filter((p) => p.isLineage)
-      .sort((a, b) => a.idx - b.idx);
-
-    if (lineagePoints.length < 2) return null;
-
-    const pathD = lineagePoints
-      .map((p, i) => {
-        const x = (xScale as (v: number) => number)(p.idx);
-        const y = (yScale as (v: number) => number)(p.run.score!);
-        return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-      })
-      .join(" ");
-
     return (
       <g>
-        {/* Shadow */}
-        <path d={pathD} fill="none" stroke="#2a4e7a" strokeWidth={3} opacity={0.3} strokeLinecap="round" strokeLinejoin="round" />
-        {/* Main line */}
-        <path d={pathD} fill="none" stroke="#3f72af" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+        {lineageChains.map((chain, ci) => {
+          const pts = allPoints
+            .filter((p) => chain.has(p.run.id))
+            .sort((a, b) => a.idx - b.idx);
+          if (pts.length < 2) return null;
+
+          const pathD = pts
+            .map((p, i) => {
+              const x = (xScale as (v: number) => number)(p.idx);
+              const y = (yScale as (v: number) => number)(p.run.score!);
+              return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+            })
+            .join(" ");
+
+          return (
+            <g key={ci}>
+              <path d={pathD} fill="none" stroke="#2a4e7a" strokeWidth={3} opacity={0.3} strokeLinecap="round" strokeLinejoin="round" />
+              <path d={pathD} fill="none" stroke="#3f72af" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+          );
+        })}
       </g>
     );
   };
@@ -176,7 +191,7 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
   };
 
   return (
-    <div className="h-full w-full relative">
+    <div className="h-full w-full relative overflow-visible">
       <ResponsiveLine
         data={lineData}
         xScale={{ type: "linear", min: 0, max: xMax }}
@@ -226,7 +241,7 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
       {/* Tooltip */}
       {hoveredRun && (
         <div
-          className="absolute pointer-events-none z-20 card p-3 max-w-xs"
+          className="absolute pointer-events-none z-20 card p-3 w-max max-w-xs"
           style={{
             left: hoveredRun.x + 70,
             top: hoveredRun.y - 10,

@@ -6,6 +6,7 @@ import { getAgentColor } from "@/lib/agent-colors";
 import { DiffViewer } from "@/components/diff-viewer";
 import { fetchGitHubDiff } from "@/lib/github-diff";
 import { apiFetch } from "@/lib/api";
+import { resolveRun, resolveId, buildRunMap } from "@/lib/run-utils";
 
 interface FullRun extends Run {
   post_id?: number;
@@ -37,12 +38,12 @@ function formatDate(iso: string) {
 }
 
 function buildAncestorChain(run: Run, allRuns: Run[]): Run[] {
-  const runMap = new Map(allRuns.map((r) => [r.id, r]));
+  const runMap = buildRunMap(allRuns);
   const chain: Run[] = [];
   let current: Run | undefined = run;
   while (current) {
     chain.unshift(current);
-    current = current.parent_id ? runMap.get(current.parent_id) : undefined;
+    current = current.parent_id ? resolveRun(current.parent_id, runMap) : undefined;
   }
   return chain;
 }
@@ -50,7 +51,10 @@ function buildAncestorChain(run: Run, allRuns: Run[]): Run[] {
 export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProps) {
   const [fullRun, setFullRun] = useState<FullRun | null>(null);
   const [compareBaseId, setCompareBaseId] = useState<string>(
-    () => run.parent_id ?? run.id
+    () => {
+      if (!run.parent_id) return run.id;
+      return resolveId(run.parent_id, runs.map((r) => r.id)) ?? run.id;
+    }
   );
   const [diff, setDiff] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
@@ -134,6 +138,7 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
             </div>
           )}
 
+          {chain.length > 1 && (<>
           <div className="h-px bg-[var(--color-border)]" />
 
           {/* Diff (lineage + GitHub diff combined) */}
@@ -215,6 +220,7 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
               </div>
             )}
           </div>
+          </>)}
 
         </div>
       </div>

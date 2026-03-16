@@ -1,4 +1,5 @@
 import { Run } from "@/types/api";
+import { resolveId } from "@/lib/run-utils";
 
 export interface TreeNode {
   run: Run;
@@ -20,7 +21,8 @@ export function buildTree(runs: Run[]): TreeNode[] {
   for (const run of runs) map.set(run.id, { run, children: [], x: 0, y: 0 });
   for (const run of runs) {
     const node = map.get(run.id)!;
-    if (run.parent_id && map.has(run.parent_id)) map.get(run.parent_id)!.children.push(node);
+    const parentFullId = run.parent_id ? resolveId(run.parent_id, map.keys()) : undefined;
+    if (parentFullId && map.has(parentFullId)) map.get(parentFullId)!.children.push(node);
     else roots.push(node);
   }
   for (const node of map.values()) {
