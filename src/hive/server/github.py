@@ -144,7 +144,8 @@ class GitHubApp:
         with tempfile.TemporaryDirectory() as tmpdir:
             import tarfile, io
             tar = tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz")
-            tar.extractall(tmpdir, filter="data")
+            members = [m for m in tar.getmembers() if not os.path.basename(m.name).startswith("._")]
+            tar.extractall(tmpdir, members=members, filter="data")
             tar.close()
             subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
             subprocess.run(["git", "add", "."], cwd=tmpdir, check=True, capture_output=True)

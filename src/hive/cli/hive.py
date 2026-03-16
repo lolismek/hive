@@ -113,18 +113,23 @@ def task_list(as_json):
 @task.command("create")
 @click.argument("task_id")
 @click.option("--name", required=True, help="Human-readable task name")
-@click.option("--repo", required=True, help="GitHub repo URL")
-@click.option("--description", default="", help="Task description")
+@click.option("--path", "folder", required=True, type=click.Path(exists=True), help="Local folder to upload")
+@click.option("--description", required=True, help="Task description")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def task_create(task_id: str, name: str, repo: str, description: str, as_json):
-    """Register a new task on the server. The repo must follow the task structure (see: hive task --help)."""
-    data = _api("POST", "/tasks", json={
-        "id": task_id, "name": name, "repo_url": repo, "description": description,
-    })
+def task_create(task_id: str, name: str, folder: str, description: str, as_json):
+    """Create a new task by uploading a local folder."""
+    import io, tarfile
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        tar.add(folder, arcname=".")
+    buf.seek(0)
+    data = _api("POST", "/tasks",
+                data={"id": task_id, "name": name, "description": description},
+                files={"archive": ("task.tar.gz", buf, "application/gzip")})
     if as_json:
         _json_out(data)
     else:
-        click.echo(f"Task created: {data['id']}")
+        click.echo(f"Task created: {data['id']} → {data['repo_url']}")
 
 @task.command("clone")
 @click.argument("task_id")

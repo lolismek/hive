@@ -11,6 +11,9 @@ class MockGitHubApp:
     def _get_token(self) -> str:
         return "MOCK_TOKEN"
 
+    def _headers(self) -> dict:
+        return {"Authorization": "Bearer MOCK_TOKEN"}
+
     def create_fork(self, upstream_repo: str, fork_name: str) -> dict:
         self.created_forks.append((upstream_repo, fork_name))
         return {

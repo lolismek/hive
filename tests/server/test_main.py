@@ -1,25 +1,51 @@
 """Tests for all API endpoints."""
 
+import io
+import tarfile
+
 import pytest
+
+
+def _make_tar(files: dict[str, str] = None) -> io.BytesIO:
+    """Create a .tar.gz in memory with optional files."""
+    if files is None:
+        files = {"README.md": "hello"}
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for name, content in files.items():
+            data = content.encode()
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    buf.seek(0)
+    return buf
+
+
+def _post_task(client, id="gsm8k", name="GSM8K Solver", description="A solver task", config=None):
+    data = {"id": id, "name": name, "description": description}
+    if config:
+        data["config"] = config
+    return client.post("/tasks", data=data, files={"archive": ("task.tar.gz", _make_tar(), "application/gzip")})
 
 
 class TestCreateTask:
     def test_create(self, client):
-        resp = client.post("/tasks", json={
-            "id": "gsm8k", "name": "GSM8K Solver", "repo_url": "https://github.com/test/gsm8k",
-        })
+        resp = _post_task(client)
         assert resp.status_code == 201
         assert resp.json()["id"] == "gsm8k"
+        assert resp.json()["repo_url"] == "https://github.com/hive-agents/task--gsm8k"
 
     def test_duplicate(self, client):
-        client.post("/tasks", json={"id": "t1", "name": "T", "repo_url": "https://x"})
-        resp = client.post("/tasks", json={"id": "t1", "name": "T", "repo_url": "https://x"})
+        _post_task(client, id="t1", name="T", description="D")
+        resp = _post_task(client, id="t1", name="T", description="D")
         assert resp.status_code == 409
 
     def test_missing_fields(self, client):
-        assert client.post("/tasks", json={}).status_code == 400
-        assert client.post("/tasks", json={"id": "x"}).status_code == 400
-        assert client.post("/tasks", json={"id": "x", "name": "X"}).status_code == 400
+        # no fields at all
+        assert client.post("/tasks", data={}, files={"archive": ("t.tar.gz", _make_tar(), "application/gzip")}).status_code == 422
+        # missing description (now required)
+        assert client.post("/tasks", data={"id": "x", "name": "X"},
+                           files={"archive": ("t.tar.gz", _make_tar(), "application/gzip")}).status_code == 422
 
 
 class TestRegister:

@@ -48,6 +48,7 @@ def live_server(tmp_path, monkeypatch):
     db_url = f"sqlite:///{tmp_path}/test.db"
     monkeypatch.setattr("hive.server.db.DATABASE_URL", db_url)
     init_db()
+    set_github_app(MockGitHubApp())
 
     port = _free_port()
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
