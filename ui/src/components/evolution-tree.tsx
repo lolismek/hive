@@ -1,32 +1,40 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { Run } from "@/types/api";
 import { getAgentColor } from "@/lib/agent-colors";
-import { buildTree, layoutTree } from "@/lib/tree-layout";
-import { resolveRun, buildRunMap } from "@/lib/run-utils";
+import { resolveRun, resolveId, buildRunMap } from "@/lib/run-utils";
+
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
 interface EvolutionTreeProps {
   runs: Run[];
   onRunClick?: (run: Run) => void;
 }
 
-const NODE_W = 220;
-const NODE_H = 68;
-const GAP_X = 28;
-const GAP_Y = 56;
+const ARTIFACT_ID = "__artifact_origin__";
 
-const MIN_ZOOM = 0.15;
-const MAX_ZOOM = 3;
-const ZOOM_STEP = 1.15;
+interface GraphNode {
+  id: string;
+  run: Run;
+  isArtifact: boolean;
+  inLineage: boolean;
+  color: string;
+  fx?: number;
+  fy?: number;
+}
 
-function clampZoom(z: number) {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+interface GraphLink {
+  source: string;
+  target: string;
+  inLineage: boolean;
+  isFromArtifact: boolean;
+  siblingCount: number; // total children of the source node
 }
 
 function getBestLineage(runs: Run[]): { ids: Set<string>; chains: Set<string>[] } {
   if (runs.length === 0) return { ids: new Set(), chains: [] };
-
   const scored = runs.filter((r) => r.score !== null);
   if (scored.length === 0) return { ids: new Set(), chains: [] };
 
@@ -46,192 +54,411 @@ function getBestLineage(runs: Run[]): { ids: Set<string>; chains: Set<string>[] 
     }
     chains.push(chain);
   }
-
   return { ids, chains };
 }
 
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
-  const { nodes, edges, width, height } = useMemo(() => {
-    const roots = buildTree(runs);
-    return layoutTree(roots, NODE_W, NODE_H, GAP_X, GAP_Y);
-  }, [runs]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fgRef = useRef<any>(null);
+  const [dimensions, setDimensions] = useState({ width: 800, height: 400 });
+  const [cursorStyle, setCursorStyle] = useState("grab");
+  const [ready, setReady] = useState(false);
+
+  // Measure container
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setDimensions({ width, height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const { ids: bestLineage, chains: bestChains } = useMemo(() => getBestLineage(runs), [runs]);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 10, y: 10 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const graphData = useMemo(() => {
+    const runIds = new Set(runs.map((r) => r.id));
+    const nodeMap = new Map<string, GraphNode>();
+    const links: GraphLink[] = [];
 
-  // Use refs for zoom/pan so event handlers always see latest values
-  const zoomRef = useRef(zoom);
-  const panRef = useRef(pan);
-  zoomRef.current = zoom;
-  panRef.current = pan;
+    // Score range for x-positioning
+    const scores = runs.filter((r) => r.score !== null).map((r) => r.score!);
+    const minScore = scores.length > 0 ? Math.min(...scores) : 0;
+    const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
+    const scoreRange = maxScore - minScore || 1;
+    const SPREAD_X = 600;
 
-  const zoomToward = useCallback((clientX: number, clientY: number, newZoom: number) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cx = clientX - rect.left;
-    const cy = clientY - rect.top;
-    const oldZoom = zoomRef.current;
-    const oldPan = panRef.current;
-    const ratio = newZoom / oldZoom;
-    setPan({ x: cx - (cx - oldPan.x) * ratio, y: cy - (cy - oldPan.y) * ratio });
-    setZoom(newZoom);
-  }, []);
+    // Build children map for tree layout
+    const children = new Map<string, string[]>();
+    children.set(ARTIFACT_ID, []);
 
-  const zoomToCenter = useCallback((newZoom: number) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    zoomToward(rect.left + rect.width / 2, rect.top + rect.height / 2, newZoom);
-  }, [zoomToward]);
-
-  // Wheel: pinch-to-zoom (ctrlKey) or pan
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        // Pinch-to-zoom or ctrl+scroll
-        const factor = e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
-        const newZoom = clampZoom(zoomRef.current * factor);
-        zoomToward(e.clientX, e.clientY, newZoom);
+    // Find roots and build parent→children
+    for (const run of runs) {
+      const parentFullId = run.parent_id ? resolveId(run.parent_id, runIds.values()) : undefined;
+      if (!parentFullId || !runIds.has(parentFullId)) {
+        children.get(ARTIFACT_ID)!.push(run.id);
       } else {
-        // Plain scroll → pan
-        setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+        if (!children.has(parentFullId)) children.set(parentFullId, []);
+        children.get(parentFullId)!.push(run.id);
       }
+    }
+
+    // Sort children by created_at for deterministic order
+    const runById = new Map(runs.map((r) => [r.id, r]));
+    for (const [, kids] of children) {
+      kids.sort((a, b) => {
+        const ra = runById.get(a), rb = runById.get(b);
+        if (!ra || !rb) return 0;
+        return new Date(ra.created_at).getTime() - new Date(rb.created_at).getTime();
+      });
+    }
+
+    // Tree layout: leaves get sequential y slots, parents center on children.
+    // fx = score-based (same score = same vertical line)
+    const GAP_Y = 28;
+    let leafSlot = 0;
+    const posMap = new Map<string, { fx: number; fy: number }>();
+
+    function scoreToX(nodeId: string): number {
+      if (nodeId === ARTIFACT_ID) return -60;
+      const run = runById.get(nodeId);
+      if (!run || run.score === null) return 0;
+      return ((run.score - minScore) / scoreRange) * SPREAD_X;
+    }
+
+    function layout(nodeId: string): number {
+      const kids = children.get(nodeId) || [];
+      const fx = scoreToX(nodeId);
+      if (kids.length === 0) {
+        const fy = leafSlot * GAP_Y;
+        leafSlot++;
+        posMap.set(nodeId, { fx, fy });
+        return fy;
+      }
+      const childYs = kids.map((kid) => layout(kid));
+      const fy = (childYs[0] + childYs[childYs.length - 1]) / 2;
+      posMap.set(nodeId, { fx, fy });
+      return fy;
+    }
+    layout(ARTIFACT_ID);
+
+    // Center around y=0
+    const allYs = [...posMap.values()].map((p) => p.fy);
+    const midY = (Math.min(...allYs) + Math.max(...allYs)) / 2;
+    for (const pos of posMap.values()) pos.fy -= midY;
+
+    // Create artifact node
+    const artifactRun: Run = {
+      id: ARTIFACT_ID,
+      task_id: runs[0]?.task_id ?? "",
+      agent_id: "shared artifact",
+      branch: "", parent_id: null,
+      tldr: "Shared starting artifact", message: "",
+      score: null, verified: false,
+      created_at: runs.length > 0
+        ? runs.reduce((e, r) => r.created_at < e ? r.created_at : e, runs[0].created_at)
+        : new Date().toISOString(),
     };
+    const originPos = posMap.get(ARTIFACT_ID) || { fx: 0, fy: 0 };
+    const artifactNode: GraphNode = {
+      id: ARTIFACT_ID, run: artifactRun, isArtifact: true,
+      inLineage: false, color: "#60a5fa",
+      fx: originPos.fx, fy: originPos.fy,
+    };
+    nodeMap.set(ARTIFACT_ID, artifactNode);
 
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [zoomToward]);
+    // Create run nodes
+    for (const run of runs) {
+      const pos = posMap.get(run.id);
+      nodeMap.set(run.id, {
+        id: run.id, run, isArtifact: false,
+        inLineage: bestLineage.has(run.id),
+        color: getAgentColor(run.agent_id),
+        fx: pos?.fx, fy: pos?.fy,
+      });
+    }
 
-  // Keyboard: Cmd/Ctrl + =/-/0
+    // Build links
+    const rootIds = children.get(ARTIFACT_ID) || [];
+    for (const rootId of rootIds) {
+      links.push({
+        source: ARTIFACT_ID, target: rootId,
+        inLineage: false, isFromArtifact: true,
+        siblingCount: rootIds.length,
+      });
+    }
+    for (const run of runs) {
+      if (!run.parent_id) continue;
+      const parentFullId = resolveId(run.parent_id, runIds.values());
+      if (parentFullId && runIds.has(parentFullId)) {
+        const inLineage = bestChains.some((c) => c.has(parentFullId) && c.has(run.id));
+        const siblings = (children.get(parentFullId) || []).length;
+        links.push({
+          source: parentFullId, target: run.id,
+          inLineage, isFromArtifact: false,
+          siblingCount: siblings,
+        });
+      }
+    }
+
+    return { nodes: [...nodeMap.values()], links };
+  }, [runs, bestLineage, bestChains]);
+
+
+  // Keep render loop alive for edge pulse animation
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const interval = setInterval(() => {
+      const fg = fgRef.current;
+      if (fg) fg.d3ReheatSimulation();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey)) return;
-      if (e.key === "=" || e.key === "+") {
-        e.preventDefault();
-        zoomToCenter(clampZoom(zoomRef.current * ZOOM_STEP));
-      } else if (e.key === "-") {
-        e.preventDefault();
-        zoomToCenter(clampZoom(zoomRef.current / ZOOM_STEP));
-      } else if (e.key === "0") {
-        e.preventDefault();
-        setZoom(1);
-        setPan({ x: 10, y: 10 });
+  // Fit graph: seed on left, rightmost node on right, centered
+  const fitGraph = useCallback(() => {
+    const fg = fgRef.current;
+    if (!fg || graphData.nodes.length === 0) return;
+
+    // Use fx/fy from our node data (already computed, no need to wait for simulation)
+    const xs = graphData.nodes.filter((n) => n.fx != null).map((n) => n.fx!);
+    const ys = graphData.nodes.filter((n) => n.fy != null).map((n) => n.fy!);
+    if (xs.length === 0 || ys.length === 0) return;
+
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const graphW = maxX - minX || 1;
+    const graphH = maxY - minY || 1;
+    const pad = 60;
+
+    const scaleX = (dimensions.width - pad * 2) / graphW;
+    const scaleY = (dimensions.height - pad * 2) / graphH;
+    const zoom = Math.min(scaleX, scaleY, 2.5);
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    fg.zoom(zoom, 0);
+    fg.centerAt(centerX, centerY, 0);
+    setReady(true);
+  }, [graphData, dimensions]);
+
+  // Run fit on mount and when data changes
+  useEffect(() => {
+    // Small delay to ensure the ForceGraph2D ref is ready
+    const timer = setTimeout(fitGraph, 100);
+    return () => clearTimeout(timer);
+  }, [fitGraph]);
+
+  // Custom node rendering on Canvas
+  const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    const gn = node as GraphNode;
+    const x = node.x as number;
+    const y = node.y as number;
+
+    if (gn.isArtifact) {
+      // Seed: larger gray square, no border
+      const size = 16;
+      const half = size / 2;
+      ctx.save();
+      ctx.fillStyle = "#d1d5db";
+      ctx.beginPath();
+      ctx.roundRect(x - half, y - half, size, size, 3);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    // Regular nodes: small glowing squares
+    const size = gn.inLineage ? 7 : 5;
+    const half = size / 2;
+
+    ctx.save();
+    ctx.fillStyle = gn.inLineage ? gn.color : gn.color + "cc";
+    ctx.strokeStyle = gn.inLineage ? gn.color : gn.color + "80";
+    ctx.lineWidth = gn.inLineage ? 1.5 : 0.8;
+
+    // Rounded rect
+    const rx = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - half + rx, y - half);
+    ctx.lineTo(x + half - rx, y - half);
+    ctx.quadraticCurveTo(x + half, y - half, x + half, y - half + rx);
+    ctx.lineTo(x + half, y + half - rx);
+    ctx.quadraticCurveTo(x + half, y + half, x + half - rx, y + half);
+    ctx.lineTo(x - half + rx, y + half);
+    ctx.quadraticCurveTo(x - half, y + half, x - half, y + half - rx);
+    ctx.lineTo(x - half, y - half + rx);
+    ctx.quadraticCurveTo(x - half, y - half, x - half + rx, y - half);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }, []);
+
+  // Custom link rendering on Canvas
+  const paintLink = useCallback((link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    const gl = link as GraphLink;
+    const src = link.source;
+    const tgt = link.target;
+    if (!src || !tgt || src.x == null || tgt.x == null) return;
+
+    const x1 = src.x as number;
+    const y1 = src.y as number;
+    const x2 = tgt.x as number;
+    const y2 = tgt.y as number;
+
+    ctx.save();
+
+    // Edge thickness scales with sibling count (more branches = thicker trunk)
+    const baseWidth = Math.min(0.6 + gl.siblingCount * 0.5, 4);
+
+    if (gl.isFromArtifact) {
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = Math.min(0.5 + gl.siblingCount * 0.3, 3);
+      ctx.globalAlpha = 0.6;
+      ctx.setLineDash([3, 2]);
+    } else if (gl.inLineage) {
+      const mx = (x1 + x2) / 2;
+
+      // Base stroke — solid, subtle
+      ctx.strokeStyle = "#3f72af";
+      ctx.lineWidth = baseWidth + 0.5;
+      ctx.globalAlpha = 0.25;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.bezierCurveTo(mx, y1, mx, y2, x2, y2);
+      ctx.stroke();
+
+      // Traveling glow pulse — sample a bright segment along the curve
+      const t = ((Date.now() / 1500) % 1); // 0→1 over 1.5s
+      const pulseLen = 0.18; // length of bright segment
+
+      // Cubic bezier point helper
+      const bx = (t: number) => {
+        const mt = 1 - t;
+        return mt*mt*mt*x1 + 3*mt*mt*t*mx + 3*mt*t*t*mx + t*t*t*x2;
+      };
+      const by = (t: number) => {
+        const mt = 1 - t;
+        return mt*mt*mt*y1 + 3*mt*mt*t*y1 + 3*mt*t*t*y2 + t*t*t*y2;
+      };
+
+      // Draw bright segment from t to t+pulseLen
+      const steps = 12;
+      const tStart = t;
+      const tEnd = Math.min(t + pulseLen, 1);
+      for (let i = 0; i < steps; i++) {
+        const segT = tStart + (tEnd - tStart) * (i / steps);
+        const segT2 = tStart + (tEnd - tStart) * ((i + 1) / steps);
+        if (segT > 1 || segT2 > 1) break;
+        // Fade in at front, fade out at back
+        const localT = i / steps;
+        const alpha = Math.sin(localT * Math.PI) * 0.7;
+        ctx.strokeStyle = "#3f72af";
+        ctx.lineWidth = baseWidth + 1.5 * Math.sin(localT * Math.PI);
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.moveTo(bx(segT), by(segT));
+        ctx.lineTo(bx(segT2), by(segT2));
+        ctx.stroke();
       }
-    };
 
-    el.addEventListener("keydown", onKeyDown);
-    return () => el.removeEventListener("keydown", onKeyDown);
-  }, [zoomToCenter]);
+      ctx.restore();
+      return;
+    } else {
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = baseWidth;
+      ctx.globalAlpha = 0.3 + Math.min(gl.siblingCount * 0.05, 0.2);
+    }
 
-  // Pointer drag-to-pan
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    // Only pan on primary button (left click)
-    if (e.button !== 0) return;
-    setIsDragging(true);
-    dragStart.current = { x: e.clientX, y: e.clientY, panX: panRef.current.x, panY: panRef.current.y };
-    (e.target as Element).setPointerCapture(e.pointerId);
+    // Smooth horizontal Bezier — control points at midpoint x
+    const mx = (x1 + x2) / 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(mx, y1, mx, y2, x2, y2);
+    ctx.stroke();
+    ctx.restore();
   }, []);
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragStart.current) return;
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    setPan({ x: dragStart.current.panX + dx, y: dragStart.current.panY + dy });
+  const handleNodeHover = useCallback((node: any) => {
+    if (node && !(node as GraphNode).isArtifact) {
+      setCursorStyle("pointer");
+    } else {
+      setCursorStyle("grab");
+    }
   }, []);
 
-  const onPointerUp = useCallback(() => {
-    setIsDragging(false);
-    dragStart.current = null;
-  }, []);
-
-  const zoomPct = Math.round(zoom * 100);
-  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
-  const modKey = isMac ? "\u2318" : "Ctrl+";
+  const handleNodeClick = useCallback((node: any) => {
+    const gn = node as GraphNode;
+    if (gn.isArtifact) return;
+    onRunClick?.(gn.run);
+  }, [onRunClick]);
 
   return (
-    <div
-      ref={containerRef}
-      className="overflow-hidden h-full w-full relative outline-none"
-      tabIndex={0}
-      style={{ cursor: isDragging ? "grabbing" : "grab" }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-    >
-      <svg width="100%" height="100%">
-        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* Edges */}
-          {edges.map((e, i) => {
-            const x1 = e.parent.x + NODE_W / 2;
-            const y1 = e.parent.y + NODE_H;
-            const x2 = e.child.x + NODE_W / 2;
-            const y2 = e.child.y;
-            const my = (y1 + y2) / 2;
-            const inLineage = bestChains.some((c) => c.has(e.parent.run.id) && c.has(e.child.run.id));
-            return (
-              <path key={i} d={`M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`}
-                fill="none"
-                stroke={inLineage ? "#3f72af" : "#e5e7eb"}
-                strokeWidth={inLineage ? 2 : 1.5} />
-            );
-          })}
+    <div ref={containerRef} className="h-full w-full relative bg-white rounded-lg overflow-hidden" style={{ cursor: cursorStyle, opacity: ready ? 1 : 0 }}>
+      {dimensions.width > 0 && (
+        <ForceGraph2D
+          ref={fgRef}
+          graphData={graphData}
+          width={dimensions.width}
+          height={dimensions.height}
+          backgroundColor="#ffffff"
+          nodeCanvasObject={paintNode}
+          nodeCanvasObjectMode={() => "replace"}
+          linkCanvasObject={paintLink}
+          linkCanvasObjectMode={() => "replace"}
+          nodeVal={(node: any) => (node as GraphNode).isArtifact ? 8 : (node as GraphNode).inLineage ? 5 : 3}
+          nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
+            const r = 12;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+            ctx.fill();
+          }}
+          nodeLabel={(node: any) => {
+            const gn = node as GraphNode;
+            if (gn.isArtifact) return "";
+            const scoreHtml = gn.run.score !== null
+              ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;color:#111827">${gn.run.score.toFixed(3)}</div>`
+              : "";
+            return `<div style="font-family:'DM Sans',sans-serif;background:#ffffff;padding:12px;border-radius:12px;border:1px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);max-width:280px;width:max-content;line-height:1.5">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${gn.color}"></div>
+                <span style="font-size:14px;font-weight:600;color:#111827">${gn.run.agent_id}</span>
+                <span style="font-size:11px;color:#6b7280">${relativeTime(gn.run.created_at)}</span>
+              </div>
+              ${scoreHtml}
+              <div style="font-size:12px;color:#6b7280;margin-top:2px">${gn.run.tldr}</div>
+            </div>`;
+          }}
+          onNodeClick={handleNodeClick}
+          onNodeHover={handleNodeHover}
+          cooldownTicks={Infinity}
+          warmupTicks={100}
+          d3AlphaDecay={0.03}
+          d3AlphaMin={0}
+          enableNodeDrag={false}
+          minZoom={0.3}
+          maxZoom={5}
+        />
+      )}
 
-          {/* Nodes */}
-          {nodes.map((node) => {
-            const inLineage = bestLineage.has(node.run.id);
-            return (
-              <g key={node.run.id} transform={`translate(${node.x}, ${node.y})`}
-                onClick={() => onRunClick?.(node.run)} className="cursor-pointer">
-                <rect width={NODE_W} height={NODE_H} rx={8}
-                  fill={inLineage ? "#eff6ff" : "#ffffff"}
-                  stroke={inLineage ? "#3f72af" : "#e5e7eb"}
-                  strokeWidth={inLineage ? 1.5 : 1} />
-                <text x={NODE_W / 2} y={24} fill="#111827" fontSize={12} fontFamily="'IBM Plex Mono', monospace" textAnchor="middle">
-                  {node.run.tldr.length > 24 ? node.run.tldr.slice(0, 24) + "..." : node.run.tldr}
-                </text>
-                <text x={NODE_W / 2} y={44} fill="#111827" fontSize={16} fontFamily="'DM Sans', sans-serif" fontWeight={600} textAnchor="middle">
-                  {node.run.agent_id.length > 20 ? node.run.agent_id.slice(0, 20) + "…" : node.run.agent_id}
-                </text>
-                {node.run.score !== null && (
-                  <text x={NODE_W / 2} y={61}
-                    fill={inLineage ? "#3f72af" : "#6b7280"}
-                    fontSize={10}
-                    fontWeight={inLineage ? 600 : 400}
-                    fontFamily="'IBM Plex Mono', monospace" textAnchor="middle">
-                    {node.run.score.toFixed(3)}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-
-      {/* Controls overlay */}
-      <div className="absolute bottom-3 right-3 flex items-center gap-2">
-        <div className="px-3 py-1.5 rounded-lg text-xs bg-[var(--color-layer-2)] text-[var(--color-text-secondary)] leading-normal select-none">
-          Scroll to pan · Pinch or <kbd className="font-[family-name:var(--font-ibm-plex-mono)] font-medium">{modKey}+/{modKey}&ndash;</kbd> to zoom · <kbd className="font-[family-name:var(--font-ibm-plex-mono)] font-medium">{modKey}0</kbd> reset
-        </div>
-        {zoomPct !== 100 && (
-          <button
-            onClick={() => { setZoom(1); setPan({ x: 10, y: 10 }); }}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium font-[family-name:var(--font-ibm-plex-mono)] bg-[var(--color-layer-2)] text-[var(--color-text)] hover:bg-[var(--color-border)] transition-colors"
-          >
-            {zoomPct}%
-          </button>
-        )}
-      </div>
     </div>
   );
 }
