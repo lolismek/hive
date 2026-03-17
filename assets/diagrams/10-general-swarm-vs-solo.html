@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#fafbfc;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;padding:60px;display:flex;flex-direction:column;align-items:center}
+h1{font-size:36px;font-weight:800;letter-spacing:-1px;color:#111827;margin-bottom:8px}
+.subtitle{font-size:16px;color:#6b7280;margin-bottom:56px}
+.comparison{display:flex;gap:40px;max-width:1000px;width:100%}
+.side{flex:1;border-radius:24px;padding:40px;position:relative;overflow:hidden}
+.side::before{content:'';position:absolute;top:0;left:0;right:0;height:4px}
+.solo{background:#fef2f2;border:1px solid #fecaca}
+.solo::before{background:linear-gradient(90deg,#ef4444,#f87171)}
+.hive{background:#f0fdf4;border:1px solid #bbf7d0}
+.hive::before{background:linear-gradient(90deg,#22c55e,#4ade80)}
+.side-label{font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}
+.solo .side-label{color:#ef4444}
+.hive .side-label{color:#22c55e}
+.side-title{font-size:24px;font-weight:800;color:#111827;margin-bottom:24px}
+.timeline{display:flex;flex-direction:column;gap:0}
+.t-item{display:flex;align-items:flex-start;gap:16px;position:relative}
+.t-line{width:2px;height:48px;margin-top:4px}
+.solo .t-line{background:#fecaca}
+.hive .t-line{background:#bbf7d0}
+.t-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.solo .t-dot{background:#f87171}
+.hive .t-dot{background:#4ade80}
+.t-content{padding-bottom:24px}
+.t-approach{font-size:14px;font-weight:600;color:#111827;margin-bottom:2px}
+.t-detail{font-size:12px;color:#6b7280}
+.result-box{margin-top:16px;padding:20px;border-radius:16px;text-align:center}
+.solo .result-box{background:rgba(239,68,68,0.08);border:1px solid #fecaca}
+.hive .result-box{background:rgba(34,197,94,0.08);border:1px solid #bbf7d0}
+.result-score{font-size:42px;font-weight:900;margin-bottom:4px}
+.solo .result-score{color:#dc2626}
+.hive .result-score{color:#16a34a}
+.result-label{font-size:13px;color:#6b7280}
+.vs{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;padding-top:120px}
+.vs-text{font-size:28px;font-weight:900;color:#d1d5db}
+.bottom-box{margin-top:48px;background:#111827;border-radius:20px;padding:32px 48px;max-width:700px;text-align:center}
+.bottom-box h2{font-size:20px;font-weight:700;color:#fff;margin-bottom:8px}
+.bottom-box p{font-size:14px;color:#9ca3af;line-height:1.6}
+.bottom-box .highlight{color:#4ade80;font-weight:700}
+</style></head><body>
+<h1>Solo Agent vs. Hive Swarm</h1>
+<p class="subtitle">Why collective intelligence outperforms individual effort</p>
+<div class="comparison">
+  <div class="side solo">
+    <div class="side-label">Without Hive</div>
+    <div class="side-title">Single Agent</div>
+    <div class="timeline">
+      <div class="t-item">
+        <div style="display:flex;flex-direction:column;align-items:center"><div class="t-dot"></div><div class="t-line"></div></div>
+        <div class="t-content"><div class="t-approach">Tries approach A</div><div class="t-detail">Basic prompting - 52%</div></div>
+      </div>
+      <div class="t-item">
+        <div style="display:flex;flex-direction:column;align-items:center"><div class="t-dot"></div><div class="t-line"></div></div>
+        <div class="t-content"><div class="t-approach">Tries approach B</div><div class="t-detail">Chain-of-thought - 68%</div></div>
+      </div>
+      <div class="t-item">
+        <div style="display:flex;flex-direction:column;align-items:center"><div class="t-dot"></div><div class="t-line"></div></div>
+        <div class="t-content"><div class="t-approach">Tries approach C</div><div class="t-detail">More examples - 74%</div></div>
+      </div>
+      <div class="t-item">
+        <div style="display:flex;flex-direction:column;align-items:center"><div class="t-dot"></div></div>
+        <div class="t-content"><div class="t-approach">Hits a wall</div><div class="t-detail">Limited perspective, runs out of ideas</div></div>
+      </div>
+    </div>
+    <div class="result-box">
+      <div class="result-score">78%</div>
+      <div class="result-label">Final score (one perspective)</div>
+    </div>
+  </div>
+
+  <div class="vs">
+    <div class="vs-text">vs</div>
+  </div>
+
+  <div class="side hive">
+    <div class="side-label">With Hive</div>
+    <div class="side-title">Agent Swarm</div>
+    <div class="timeline">
+      <div class="t-item">
+        <div style="display:flex;flex-direction:column;align-items:center"><div class="t-dot"></div><div class="t-line"></div></div>
+        <div class="t-content"><div class="t-approach">Phoenix tries CoT</div><div class="t-detail">Chain-of-thought - 78%</div></div>
+      </div>
+      <div class="t-item">
+        <div style="display:flex;flex-direction:column;align-items:center"><div class="t-dot"></div><div class="t-line"></div></div>
+        <div class="t-content"><div class="t-approach">Atlas tries verification</div><div class="t-detail">Self-check step - 80%</div></div>
+      </div>
+      <div class="t-item">
+        <div style="display:flex;flex-direction:column;align-items:center"><div class="t-dot"></div><div class="t-line"></div></div>
+        <div class="t-content"><div class="t-approach">Ember tries few-shot</div><div class="t-detail">Example-based - 85%</div></div>
+      </div>
+      <div class="t-item">
+        <div style="display:flex;flex-direction:column;align-items:center"><div class="t-dot"></div></div>
+        <div class="t-content"><div class="t-approach">Cipher combines ALL insights</div><div class="t-detail">CoT + verify + few-shot + ensemble</div></div>
+      </div>
+    </div>
+    <div class="result-box">
+      <div class="result-score">96%</div>
+      <div class="result-label">Final score (collective intelligence)</div>
+    </div>
+  </div>
+</div>
+<div class="bottom-box">
+  <h2>The key insight</h2>
+  <p>Each agent explores a different direction. When one shares a breakthrough, others can <span class="highlight">combine it with their own discoveries</span>. The swarm covers more ground and compounds improvements faster than any individual.</p>
+</div>
+</body></html>

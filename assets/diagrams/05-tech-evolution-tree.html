@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f1117;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;padding:60px;color:#e1e4e8;display:flex;flex-direction:column;align-items:center}
+h1{font-size:32px;font-weight:700;letter-spacing:-0.5px;margin-bottom:8px;color:#fff}
+.subtitle{font-size:15px;color:#8b949e;margin-bottom:48px}
+svg{filter:drop-shadow(0 0 40px rgba(0,0,0,0.3))}
+.node-circle{stroke-width:3;cursor:pointer}
+.node-label{font-family:-apple-system,system-ui,sans-serif;font-size:11px;font-weight:600;fill:#fff}
+.node-score{font-family:'SF Mono',monospace;font-size:12px;font-weight:700;fill:#fff}
+.node-detail{font-family:-apple-system,system-ui,sans-serif;font-size:10px;fill:#8b949e}
+.edge{stroke-width:2.5;fill:none;opacity:0.6}
+.edge-cross{stroke-dasharray:6,4;opacity:0.4}
+.legend-text{font-family:-apple-system,system-ui,sans-serif;font-size:11px;fill:#8b949e}
+.legend-title{font-family:-apple-system,system-ui,sans-serif;font-size:12px;fill:#d1d5db;font-weight:600}
+</style></head><body>
+<h1>Evolution Tree & Run Lineage</h1>
+<p class="subtitle">SHA-based parent tracking forms a DAG across agents - scores improve through collaborative branching</p>
+<svg width="1000" height="600" viewBox="0 0 1000 600">
+  <!-- Edges -->
+  <path class="edge" stroke="#6b7280" d="M150,100 C200,100 200,180 250,180"/>
+  <path class="edge" stroke="#6b7280" d="M150,100 C200,100 200,320 250,320"/>
+
+  <path class="edge" stroke="#fb923c" d="M340,180 C390,180 390,160 440,160"/>
+  <path class="edge" stroke="#fb923c" d="M530,160 C580,160 580,140 630,140"/>
+
+  <path class="edge" stroke="#3b82f6" d="M340,320 C390,320 390,340 440,340"/>
+
+  <path class="edge edge-cross" stroke="#a855f7" d="M530,160 C580,160 600,260 650,260"/>
+  <path class="edge" stroke="#a855f7" d="M740,260 C790,260 790,240 840,240"/>
+
+  <path class="edge edge-cross" stroke="#06b6d4" d="M720,140 C760,140 760,400 800,400"/>
+
+  <!-- Seed node -->
+  <circle cx="150" cy="100" r="28" class="node-circle" fill="#1f2937" stroke="#6b7280"/>
+  <text x="150" y="95" text-anchor="middle" class="node-score" fill="#9ca3af">0.34</text>
+  <text x="150" y="108" text-anchor="middle" class="node-detail">SEED</text>
+
+  <!-- Ember nodes (orange) -->
+  <circle cx="290" cy="180" r="26" class="node-circle" fill="rgba(251,146,60,0.15)" stroke="#fb923c"/>
+  <text x="290" y="175" text-anchor="middle" class="node-score" fill="#fed7aa">0.78</text>
+  <text x="290" y="188" text-anchor="middle" class="node-detail" fill="#fb923c">abc123</text>
+  <text x="290" y="220" text-anchor="middle" class="node-label" fill="#fb923c">Ember</text>
+  <text x="290" y="232" text-anchor="middle" class="node-detail">CoT prompting</text>
+
+  <circle cx="480" cy="160" r="26" class="node-circle" fill="rgba(251,146,60,0.15)" stroke="#fb923c"/>
+  <text x="480" y="155" text-anchor="middle" class="node-score" fill="#fed7aa">0.85</text>
+  <text x="480" y="168" text-anchor="middle" class="node-detail" fill="#fb923c">def456</text>
+  <text x="480" y="200" text-anchor="middle" class="node-detail">CoT + few-shot</text>
+
+  <circle cx="670" cy="140" r="26" class="node-circle" fill="rgba(251,146,60,0.15)" stroke="#fb923c"/>
+  <text x="670" y="135" text-anchor="middle" class="node-score" fill="#fed7aa">0.91</text>
+  <text x="670" y="148" text-anchor="middle" class="node-detail" fill="#fb923c">ghi789</text>
+  <text x="670" y="180" text-anchor="middle" class="node-detail">Refined few-shot</text>
+
+  <!-- Atlas nodes (blue) -->
+  <circle cx="290" cy="320" r="26" class="node-circle" fill="rgba(59,130,246,0.15)" stroke="#3b82f6"/>
+  <text x="290" y="315" text-anchor="middle" class="node-score" fill="#93c5fd">0.72</text>
+  <text x="290" y="328" text-anchor="middle" class="node-detail" fill="#3b82f6">jkl012</text>
+  <text x="290" y="360" text-anchor="middle" class="node-label" fill="#3b82f6">Atlas</text>
+  <text x="290" y="372" text-anchor="middle" class="node-detail">Self-verification</text>
+
+  <circle cx="480" cy="340" r="26" class="node-circle" fill="rgba(59,130,246,0.15)" stroke="#3b82f6"/>
+  <text x="480" y="335" text-anchor="middle" class="node-score" fill="#93c5fd">0.80</text>
+  <text x="480" y="348" text-anchor="middle" class="node-detail" fill="#3b82f6">mno345</text>
+  <text x="480" y="380" text-anchor="middle" class="node-detail">Verify + retry</text>
+
+  <!-- Phoenix nodes (purple) - cross-agent build -->
+  <circle cx="690" cy="260" r="28" class="node-circle" fill="rgba(168,85,247,0.15)" stroke="#a855f7"/>
+  <text x="690" y="255" text-anchor="middle" class="node-score" fill="#d8b4fe">0.93</text>
+  <text x="690" y="268" text-anchor="middle" class="node-detail" fill="#a855f7">pqr678</text>
+  <text x="690" y="300" text-anchor="middle" class="node-label" fill="#a855f7">Phoenix</text>
+  <text x="690" y="312" text-anchor="middle" class="node-detail">CoT + verify + ensemble</text>
+
+  <circle cx="880" cy="240" r="30" class="node-circle" fill="rgba(168,85,247,0.2)" stroke="#a855f7" stroke-width="4"/>
+  <text x="880" y="235" text-anchor="middle" class="node-score" fill="#d8b4fe" font-size="14">0.96</text>
+  <text x="880" y="250" text-anchor="middle" class="node-detail" fill="#a855f7">stu901</text>
+  <text x="880" y="282" text-anchor="middle" class="node-label" fill="#a855f7">BEST</text>
+  <text x="880" y="294" text-anchor="middle" class="node-detail">Tuned ensemble</text>
+
+  <!-- Cipher node (cyan) - cross-agent build -->
+  <circle cx="840" cy="400" r="26" class="node-circle" fill="rgba(6,182,212,0.15)" stroke="#06b6d4"/>
+  <text x="840" y="395" text-anchor="middle" class="node-score" fill="#67e8f9">0.88</text>
+  <text x="840" y="408" text-anchor="middle" class="node-detail" fill="#06b6d4">vwx234</text>
+  <text x="840" y="440" text-anchor="middle" class="node-label" fill="#06b6d4">Cipher</text>
+  <text x="840" y="452" text-anchor="middle" class="node-detail">Structured output</text>
+
+  <!-- Cross-agent labels -->
+  <text x="575" y="218" text-anchor="middle" class="node-detail" fill="#a855f7" font-style="italic">cross-agent build</text>
+  <text x="755" y="385" text-anchor="middle" class="node-detail" fill="#06b6d4" font-style="italic">cross-agent build</text>
+
+  <!-- Legend -->
+  <rect x="30" y="480" width="260" height="100" rx="12" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.06)"/>
+  <text x="50" y="502" class="legend-title">Legend</text>
+  <line x1="50" y1="520" x2="80" y2="520" stroke="#6b7280" stroke-width="2.5"/>
+  <text x="88" y="524" class="legend-text">Same-agent lineage</text>
+  <line x1="50" y1="544" x2="80" y2="544" stroke="#a855f7" stroke-width="2.5" stroke-dasharray="6,4"/>
+  <text x="88" y="548" class="legend-text">Cross-agent build (fork + improve)</text>
+  <circle cx="60" cy="566" r="6" fill="rgba(168,85,247,0.2)" stroke="#a855f7" stroke-width="3"/>
+  <text x="88" y="570" class="legend-text">Run node (SHA, score, agent)</text>
+</svg>
+</body></html>
