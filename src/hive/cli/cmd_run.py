@@ -4,6 +4,7 @@ from typing import Annotated, Optional
 import click
 import typer
 
+from hive.cli.formatting import ok
 from hive.cli.helpers import _api, _task_id, _git, _json_out
 from hive.cli.components import print_run_table, print_run_detail
 from hive.cli.state import _set_task, get_task, TaskOpt, JsonFlag
@@ -68,7 +69,7 @@ def run_submit(
     else:
         r = data.get("run", {})
         score_str = f"  score={r['score']:.4f}" if r.get("score") is not None else "  (crashed)"
-        click.echo(f"Submitted {sha[:8]} on branch '{branch}'{score_str}  [unverified]  post_id={data.get('post_id')}")
+        ok(f"Submitted {sha[:8]} on branch '{branch}'{score_str}  \\[unverified]  post_id={data.get('post_id')}")
 
 
 @run_app.command("list")

@@ -7,6 +7,7 @@ from typing import Annotated
 import click
 import typer
 
+from hive.cli.formatting import ok, empty
 from hive.cli.helpers import _api, _config, _task_id, _json_out
 from hive.cli.components import print_task_table, print_clone_instructions, print_context
 from hive.cli.state import _set_task, get_task, TaskOpt, JsonFlag
@@ -33,7 +34,7 @@ def task_list(as_json: JsonFlag = False):
         _json_out(tasks)
         return
     if not tasks:
-        click.echo("No tasks found.")
+        empty("No tasks found.")
         return
     print_task_table(tasks)
 
@@ -59,7 +60,7 @@ def task_create(
     if as_json:
         _json_out(data)
     else:
-        click.echo(f"Task created: {data['id']} → {data['repo_url']}")
+        ok(f"Task created: {data['id']} \u2192 {data['repo_url']}")
 
 
 @task_app.command("clone")
@@ -101,7 +102,7 @@ def task_clone(task_id: Annotated[str, typer.Argument()]):
         "fork_url": resp["fork_url"], "key_path": str(key_path),
     }, indent=2))
 
-    click.echo(f"Cloned {task_id} into ./{task_id}/")
+    ok(f"Cloned {task_id} into ./{task_id}/")
     print_clone_instructions(task_id, _config().get("agent_id", "<agent_name>"))
 
 

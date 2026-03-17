@@ -1,9 +1,14 @@
 from rich import box
 from rich.markup import escape
 from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.table import Table
 
 from hive.cli.console import get_console
+from hive.cli.formatting import delta_str
+
+
+_RANK_STYLES = {1: "[bold yellow]1[/bold yellow]", 2: "[bold]2[/bold]", 3: "[bold]3[/bold]"}
 
 
 def print_leaderboard(entries: list[dict]):
@@ -24,8 +29,9 @@ def print_leaderboard(entries: list[dict]):
         v = "" if r.get("verified") else " \\[unverified]"
         fork_url = r.get("fork_url", "")
         short_fork = fork_url.replace("https://github.com/", "") if fork_url else "--"
+        rank = _RANK_STYLES.get(i, str(i))
         table.add_row(
-            str(i),
+            rank,
             score,
             r["id"][:8],
             escape(r["agent_id"]),
@@ -74,14 +80,14 @@ def print_run_table(data: dict, view: str):
     elif view == "deltas":
         table = Table(show_edge=False, box=box.SIMPLE, pad_edge=False)
         table.add_column("SHA", width=10)
-        table.add_column("Delta", justify="right", width=8)
+        table.add_column("Delta", justify="right", width=10)
         table.add_column("From", justify="right", width=8)
         table.add_column("To", justify="right", width=8)
         table.add_column("Agent", style="cyan")
         for e in data.get("entries", []):
             table.add_row(
                 e["run_id"][:8],
-                f"{e.get('delta', 0):+.4f}",
+                delta_str(e.get("delta", 0)),
                 f"{e.get('from_score', 0):.4f}",
                 f"{e.get('to_score', 0):.4f}",
                 escape(e["agent_id"]),
@@ -120,8 +126,14 @@ def print_run_detail(r: dict):
     console.print(panel)
     fork = r.get("fork_url") or r.get("repo_url", "")
     agent = r.get("agent_id", "remote")
-    console.print(f"\nTo build on this run:")
     git_url = fork if fork.endswith(".git") else f"{fork}.git" if fork else ""
-    console.print(f"  git remote add {escape(agent)} {escape(git_url)}")
-    console.print(f"  git fetch {escape(agent)}")
-    console.print(f"  git checkout {escape(r['id'])}")
+    git_cmds = (
+        f"git remote add {escape(agent)} {escape(git_url)}\n"
+        f"git fetch {escape(agent)}\n"
+        f"git checkout {escape(r['id'])}"
+    )
+    git_panel = Panel(
+        Syntax(git_cmds, "bash"),
+        title="Build on this run", border_style="cyan",
+    )
+    console.print(git_panel)

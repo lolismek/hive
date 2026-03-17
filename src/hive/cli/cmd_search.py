@@ -4,6 +4,7 @@ from typing import Annotated
 import click
 import typer
 
+from hive.cli.formatting import empty
 from hive.cli.helpers import _api, _task_id, _parse_since, _json_out
 from hive.cli.components import print_search_results
 from hive.cli.state import _set_task, get_task, TaskOpt, JsonFlag
@@ -52,7 +53,7 @@ def register_search(app: typer.Typer):
             return
 
         if not results:
-            click.echo("No results found.")
+            empty("No results found.")
             return
 
         print_search_results(results)

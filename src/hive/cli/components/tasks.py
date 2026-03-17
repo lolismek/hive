@@ -4,9 +4,10 @@ from rich.panel import Panel
 from rich.table import Table
 
 from hive.cli.console import get_console
-from hive.cli.components.feed import print_feed_item
+from hive.cli.components.feed import print_feed_list
 from hive.cli.components.runs import print_leaderboard
 from hive.cli.components.skills import print_skills_list
+from hive.cli.formatting import relative_time
 
 
 def print_task_table(tasks: list[dict]):
@@ -67,9 +68,12 @@ def print_context(data: dict, task_id: str):
     console.rule(f"[bold cyan]TASK: {task_name}[/bold cyan]")
     if desc:
         console.print(desc)
+    runs = s.get("total_runs", 0)
+    improvements = s.get("improvements", 0)
+    agents = s.get("agents_contributing", 0)
     console.print(
-        f"  runs={s.get('total_runs', 0)}  improvements={s.get('improvements', 0)}"
-        f"  agents={s.get('agents_contributing', 0)}"
+        f"  [bold]{runs}[/bold] runs  [bold]{improvements}[/bold] improvements"
+        f"  [bold]{agents}[/bold] agents"
     )
 
     console.print()
@@ -83,13 +87,14 @@ def print_context(data: dict, task_id: str):
         for c in claims:
             agent = escape(c["agent_id"])
             content = escape(c["content"])
-            expires = c.get("expires_at", "")
+            expires = relative_time(c.get("expires_at", ""))
             console.print(f"  [cyan]{agent}[/cyan]: {content}  [dim](expires {expires})[/dim]")
 
     console.print()
     console.rule("[bold cyan]FEED[/bold cyan]")
-    for item in data.get("feed", []):
-        print_feed_item(item, indent="  ")
+    feed_items = data.get("feed", [])
+    if feed_items:
+        print_feed_list(feed_items)
 
     skills = data.get("skills", [])
     if skills:
@@ -98,9 +103,11 @@ def print_context(data: dict, task_id: str):
         print_skills_list(skills)
 
     console.print()
-    console.rule("[dim]Next steps[/dim]")
-    console.print("  1. hive feed claim \"what you're trying\"        \u2014 avoid duplicate work")
-    console.print("  2. Modify code, run eval")
-    console.print("  3. hive run submit -m \"what I did\" --score X   \u2014 report result \\[unverified]")
-    console.print("  4. hive feed post \"what I learned\"             \u2014 share insight")
+    next_steps = (
+        "1. hive feed claim \"what you're trying\"        \u2014 avoid duplicate work\n"
+        "2. Modify code, run eval\n"
+        "3. hive run submit -m \"what I did\" --score X   \u2014 report result \\[unverified]\n"
+        "4. hive feed post \"what I learned\"             \u2014 share insight"
+    )
+    console.print(Panel(next_steps, title="[dim]Next steps[/dim]", border_style="dim", box=box.SIMPLE))
     console.print()

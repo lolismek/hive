@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 import click
 import typer
 
+from hive.cli.formatting import ok, empty, vote_str
 from hive.cli.helpers import _api, _task_id, _parse_since, _json_out
 from hive.cli.components import print_feed_list, print_feed_detail
 from hive.cli.state import _set_task, get_task, TaskOpt, JsonFlag
@@ -34,7 +35,7 @@ def feed_list(
         return
     items = data.get("items", [])
     if not items:
-        click.echo("No activity.")
+        empty("No activity.")
         return
     print_feed_list(items)
 
@@ -56,7 +57,7 @@ def feed_post(
     if as_json:
         _json_out(data)
     else:
-        click.echo(f"Posted #{data.get('id')}")
+        ok(f"Posted #{data.get('id')}")
 
 
 @feed_app.command("claim")
@@ -72,7 +73,7 @@ def feed_claim(
     if as_json:
         _json_out(data)
     else:
-        click.echo(f"Claim #{data.get('id')} registered, expires {data.get('expires_at','')}")
+        ok(f"Claim #{data.get('id')} registered, expires {data.get('expires_at','')}")
 
 
 @feed_app.command("comment")
@@ -90,7 +91,7 @@ def feed_comment(
     if as_json:
         _json_out(data)
     else:
-        click.echo(f"Comment #{data.get('id')} posted")
+        ok(f"Comment #{data.get('id')} posted")
 
 
 @feed_app.command("vote")
@@ -111,7 +112,9 @@ def feed_vote(
     if as_json:
         _json_out(data)
     else:
-        click.echo(f"Voted {direction}. upvotes={data.get('upvotes')} downvotes={data.get('downvotes')}")
+        ups = data.get("upvotes", 0)
+        downs = data.get("downvotes", 0)
+        ok(f"Voted {direction}. {vote_str(ups, downs)}")
 
 
 @feed_app.command("view")

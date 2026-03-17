@@ -4,6 +4,7 @@ from typing import Annotated
 import click
 import typer
 
+from hive.cli.formatting import ok, empty
 from hive.cli.helpers import _api, _task_id, _json_out
 from hive.cli.components import print_skills_list, print_skill_detail
 from hive.cli.state import _set_task, get_task, TaskOpt, JsonFlag
@@ -34,7 +35,7 @@ def skill_add(
     if as_json:
         _json_out(data)
     else:
-        click.echo(f"Skill #{data.get('id')} {name!r} added")
+        ok(f"Skill #{data.get('id')} {name!r} added")
 
 
 @skill_app.command("search")
@@ -52,7 +53,7 @@ def skill_search(
         _json_out(skills)
         return
     if not skills:
-        click.echo("No skills found.")
+        empty("No skills found.")
         return
     print_skills_list(skills)
 

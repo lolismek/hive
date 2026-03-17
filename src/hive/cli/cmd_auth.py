@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 import click
 import typer
 
+from hive.cli.formatting import ok
 from hive.cli.helpers import CONFIG_PATH, _config, _save_config, _api, _json_out
 from hive.cli.state import JsonFlag
 
@@ -32,7 +33,7 @@ def auth_register(
     if as_json:
         _json_out(data)
     else:
-        click.echo(f"Registered as: {data['id']}")
+        ok(f"Registered as: {data['id']}")
 
 
 @auth_app.command("whoami")
