@@ -46,8 +46,12 @@ function HexStat({ value, label }: { value: number; label: string }) {
   );
 }
 
+type SortKey = "default" | "alpha" | "score";
+
 export default function TaskListPage() {
   const { tasks, error } = useTasks();
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("default");
 
   const { totalTasks, totalAgents } = useMemo(() => {
     if (!tasks) return { totalTasks: 0, totalAgents: 0 };
@@ -56,6 +60,20 @@ export default function TaskListPage() {
       totalAgents: tasks.reduce((sum, t) => sum + t.stats.agents_contributing, 0),
     };
   }, [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    if (!tasks) return [];
+    const q = search.toLowerCase().trim();
+    let result = q
+      ? tasks.filter((t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q))
+      : tasks;
+    if (sort === "alpha") {
+      result = [...result].sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sort === "score") {
+      result = [...result].sort((a, b) => (b.stats.best_score ?? -1) - (a.stats.best_score ?? -1));
+    }
+    return result;
+  }, [tasks, search, sort]);
 
   const serverUrl = typeof window !== "undefined" ? window.location.origin : "<server-url>";
 
@@ -79,7 +97,7 @@ export default function TaskListPage() {
 
   return (
     <div className="h-full p-8 overflow-auto">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
 
         {/* Hero */}
         <div className="mb-10 animate-fade-in text-center">
@@ -135,18 +153,71 @@ export default function TaskListPage() {
           </div>
         </div>
 
+        {/* Search bar */}
+        <div className="animate-fade-in mb-6" style={{ animationDelay: "150ms" }}>
+          <div className="relative max-w-3xl mx-auto">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tasks..."
+              className="w-full text-sm bg-white border border-[var(--color-border)] rounded-full px-4 py-2.5 pl-10 text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent shadow-sm transition-shadow"
+            />
+            <svg
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </div>
+        </div>
+
         {/* Active Tasks */}
         <div className="animate-fade-in" style={{ animationDelay: "200ms" }}>
-          <h2 className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-3">
-            Active Tasks
-          </h2>
-          {tasks.length === 0 ? (
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Active Tasks
+            </h2>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              className="px-2 py-1 rounded-md text-xs font-medium border border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] hover:border-gray-300 transition-colors cursor-pointer"
+            >
+              <option value="default">Default</option>
+              <option value="alpha">A &rarr; Z</option>
+              <option value="score">Best Score</option>
+            </select>
+          </div>
+
+          {filteredTasks.length === 0 ? (
             <div className="bg-white border border-[var(--color-border)] rounded-xl p-12 text-center">
-              <div className="text-sm text-[var(--color-text-secondary)]">No tasks yet</div>
+              {search.trim() ? (
+                <>
+                  <div className="text-sm text-[var(--color-text-secondary)] mb-1">
+                    No tasks matching &ldquo;{search}&rdquo;
+                  </div>
+                  <button
+                    onClick={() => setSearch("")}
+                    className="text-xs text-[var(--color-accent)] hover:underline"
+                  >
+                    Clear search
+                  </button>
+                </>
+              ) : (
+                <div className="text-sm text-[var(--color-text-secondary)]">No tasks yet</div>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {tasks.map((task) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredTasks.map((task) => (
                 <TaskCard key={task.id} task={task} />
               ))}
             </div>

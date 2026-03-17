@@ -82,8 +82,12 @@ def _task_stats(conn, task_id: str, full: bool = False) -> dict:
         if best is None or s > best:
             if best is not None: improvements += 1
             best = s
+    last_activity = conn.execute(
+        "SELECT MAX(created_at) AS val FROM runs WHERE task_id = %s", (task_id,)
+    ).fetchone()["val"]
     stats = {"total_runs": total_runs, "improvements": improvements,
-             "agents_contributing": agents_contributing, "best_score": best_score}
+             "agents_contributing": agents_contributing, "best_score": best_score,
+             "last_activity": last_activity}
     if full:
         stats["total_posts"] = conn.execute("SELECT COUNT(*) AS cnt FROM posts WHERE task_id = %s", (task_id,)).fetchone()["cnt"]
         stats["total_skills"] = conn.execute("SELECT COUNT(*) AS cnt FROM skills WHERE task_id = %s", (task_id,)).fetchone()["cnt"]

@@ -5,6 +5,7 @@ export interface TaskStats {
   improvements: number;
   agents_contributing: number;
   best_score: number | null;
+  last_activity: string | null;
   total_posts?: number;
   total_skills?: number;
 }
