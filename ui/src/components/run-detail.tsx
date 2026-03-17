@@ -52,16 +52,16 @@ function buildAncestorChain(run: Run, allRuns: Run[]): Run[] {
 
 export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProps) {
   const [fullRun, setFullRun] = useState<FullRun | null>(null);
-  const [compareBaseId, setCompareBaseId] = useState<string>(
-    () => {
-      if (!run.parent_id) return run.id;
-      return resolveId(run.parent_id, runs.map((r) => r.id)) ?? run.id;
-    }
-  );
+  const [compareBaseId, setCompareBaseId] = useState<string>(() => {
+    return run.parent_id
+      ? (resolveId(run.parent_id, runs.map((r) => r.id)) ?? run.id)
+      : run.id;
+  });
+  const [hasAutoSelectedSeed, setHasAutoSelectedSeed] = useState(false);
   const [diff, setDiff] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
 
-  const chain = useMemo(() => buildAncestorChain(run, runs), [run, runs]);
+  const rawChain = useMemo(() => buildAncestorChain(run, runs), [run, runs]);
 
   useEffect(() => {
     apiFetch<FullRun>(`/tasks/${taskId}/runs/${run.id}`)
@@ -70,14 +70,42 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
   }, [run.id, taskId]);
 
   const effectiveRepoUrl = fullRun?.fork_url ?? fullRun?.repo_url ?? repoUrl;
+
+  // Build the seed SHA — the commit before the first run in the chain
+  const seedSha = fullRun?.base_sha ?? (rawChain.length > 0 ? `${rawChain[0].id}~1` : null);
+
+  // Prepend a synthetic "seed" node to the chain
+  const chain = useMemo(() => {
+    if (!seedSha || rawChain.length === 0) return rawChain;
+    const seed: Run = {
+      id: seedSha,
+      task_id: taskId,
+      agent_id: "seed",
+      branch: "",
+      parent_id: null,
+      tldr: "seed",
+      message: "",
+      score: null,
+      verified: false,
+      created_at: rawChain[0].created_at,
+    };
+    return [seed, ...rawChain];
+  }, [rawChain, seedSha, taskId]);
+
+  // Auto-select seed as diff base when run has no parent
   useEffect(() => {
-    // For first runs (no parent), compare against base_sha (upstream HEAD at fork time)
-    const isFirstRun = chain.length <= 1;
-    if (compareBaseId === run.id && !isFirstRun) {
+    if (!hasAutoSelectedSeed && !run.parent_id && seedSha && compareBaseId === run.id) {
+      setCompareBaseId(seedSha);
+      setHasAutoSelectedSeed(true);
+    }
+  }, [hasAutoSelectedSeed, run.parent_id, seedSha, compareBaseId, run.id]);
+
+  useEffect(() => {
+    if (compareBaseId === run.id && chain.length > 1) {
       setDiff(null);
       return;
     }
-    const base = isFirstRun ? (fullRun?.base_sha ?? `${run.id}~1`) : compareBaseId;
+    const base = compareBaseId === run.id ? (seedSha ?? `${run.id}~1`) : compareBaseId;
     let cancelled = false;
     setDiffLoading(true);
     fetchGitHubDiff(base, run.id, effectiveRepoUrl).then((result) => {
@@ -87,7 +115,7 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
       }
     });
     return () => { cancelled = true; };
-  }, [compareBaseId, run.id, effectiveRepoUrl, chain.length, fullRun?.base_sha]);
+  }, [compareBaseId, run.id, effectiveRepoUrl, chain.length, seedSha]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -198,6 +226,7 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
             <div ref={scrollRef} className="overflow-x-auto pt-1 pb-4">
               <div className="flex items-center min-w-max px-1">
                 {chain.map((ancestor, i) => {
+                  const isSeed = ancestor.agent_id === "seed";
                   const isSelected = ancestor.id === run.id;
                   const isBase = ancestor.id === compareBaseId;
                   const color = getAgentColor(ancestor.agent_id);
@@ -221,18 +250,31 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
                           }
                         `}
                       >
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                          <span className={`text-xs font-semibold font-[family-name:var(--font-ibm-plex-mono)] tabular-nums ${isSelected ? "text-white" : "text-[var(--color-text)]"}`}>
-                            {ancestor.score?.toFixed(2) ?? "\u2014"}
-                          </span>
-                        </div>
-                        <span className={`text-[10px] leading-none whitespace-nowrap ${isSelected ? "text-gray-400" : "text-[var(--color-text-tertiary)]"}`}>
-                          {ancestor.agent_id}
-                        </span>
-                        <span className={`text-[9px] font-[family-name:var(--font-ibm-plex-mono)] leading-none ${isSelected ? "text-gray-500" : "text-[var(--color-text-tertiary)]"}`}>
-                          {ancestor.id.slice(0, 7)}
-                        </span>
+                        {isSeed ? (
+                          <>
+                            <span className={`text-xs font-semibold ${isBase ? "text-blue-600" : "text-[var(--color-text)]"}`}>
+                              Base
+                            </span>
+                            <span className={`text-[9px] font-[family-name:var(--font-ibm-plex-mono)] leading-none ${isBase ? "text-blue-400" : "text-[var(--color-text-tertiary)]"}`}>
+                              {ancestor.id.slice(0, 7)}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                              <span className={`text-xs font-semibold font-[family-name:var(--font-ibm-plex-mono)] tabular-nums ${isSelected ? "text-white" : "text-[var(--color-text)]"}`}>
+                                {ancestor.score?.toFixed(2) ?? "\u2014"}
+                              </span>
+                            </div>
+                            <span className={`text-[10px] leading-none whitespace-nowrap ${isSelected ? "text-gray-400" : "text-[var(--color-text-tertiary)]"}`}>
+                              {ancestor.agent_id}
+                            </span>
+                            <span className={`text-[9px] font-[family-name:var(--font-ibm-plex-mono)] leading-none ${isSelected ? "text-gray-500" : "text-[var(--color-text-tertiary)]"}`}>
+                              {ancestor.id.slice(0, 7)}
+                            </span>
+                          </>
+                        )}
                       </button>
                     </div>
                   );
