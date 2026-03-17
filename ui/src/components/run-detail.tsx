@@ -11,6 +11,8 @@ import { resolveRun, resolveId, buildRunMap } from "@/lib/run-utils";
 interface FullRun extends Run {
   post_id?: number;
   repo_url?: string;
+  fork_url?: string;
+  base_sha?: string;
 }
 
 interface RunDetailProps {
@@ -67,22 +69,25 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
       .catch(() => setFullRun(null));
   }, [run.id, taskId]);
 
-  const effectiveRepoUrl = fullRun?.repo_url ?? repoUrl;
+  const effectiveRepoUrl = fullRun?.fork_url ?? fullRun?.repo_url ?? repoUrl;
   useEffect(() => {
-    if (compareBaseId === run.id) {
+    // For first runs (no parent), compare against base_sha (upstream HEAD at fork time)
+    const isFirstRun = chain.length <= 1;
+    if (compareBaseId === run.id && !isFirstRun) {
       setDiff(null);
       return;
     }
+    const base = isFirstRun ? (fullRun?.base_sha ?? `${run.id}~1`) : compareBaseId;
     let cancelled = false;
     setDiffLoading(true);
-    fetchGitHubDiff(compareBaseId, run.id, effectiveRepoUrl).then((result) => {
+    fetchGitHubDiff(base, run.id, effectiveRepoUrl).then((result) => {
       if (!cancelled) {
         setDiff(result);
         setDiffLoading(false);
       }
     });
     return () => { cancelled = true; };
-  }, [compareBaseId, run.id, effectiveRepoUrl]);
+  }, [compareBaseId, run.id, effectiveRepoUrl, chain.length, fullRun?.base_sha]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -90,6 +95,14 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
       scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
     }
   }, [chain]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const agentColor = getAgentColor(run.agent_id);
   const message = fullRun?.message;
@@ -138,13 +151,15 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
             </div>
           )}
 
-          {chain.length > 1 && (<>
+          {(<>
           <div className="h-px bg-[var(--color-border)]" />
 
           {/* Diff (lineage + GitHub diff combined) */}
           <div className="px-6 py-4">
             <div className="text-xs text-[var(--color-text-secondary)] mb-3">
-              {compareBaseId !== run.id ? (
+              {chain.length <= 1 ? (
+                <span className="text-[var(--color-text-tertiary)]">Showing commit diff</span>
+              ) : compareBaseId !== run.id ? (
                 <>
                   Comparing <span className="font-[family-name:var(--font-ibm-plex-mono)] font-medium text-[var(--color-text)]">{compareBaseId.slice(0, 10)}</span>
                   {" and "}
@@ -200,21 +215,24 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
             </div>
 
             {/* GitHub diff content */}
-            {compareBaseId !== run.id && (
-              <div className="mt-3">
-                {diffLoading ? (
+            {(chain.length <= 1 || compareBaseId !== run.id) && (
+              <div className="mt-3 relative">
+                {diff ? (
+                  <div className={`transition-opacity duration-200 ${diffLoading ? "opacity-30 pointer-events-none" : ""}`}>
+                    <DiffViewer diff={diff} />
+                  </div>
+                ) : !diffLoading ? (
                   <div className="flex items-center justify-center h-20 text-sm text-[var(--color-text-tertiary)]">
+                    Could not load diff &mdash; commits may not exist on GitHub
+                  </div>
+                ) : null}
+                {diffLoading && (
+                  <div className={`flex items-center justify-center text-sm text-[var(--color-text-tertiary)] ${diff ? "absolute inset-0" : "h-20"}`}>
                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                     Fetching diff from GitHub...
-                  </div>
-                ) : diff ? (
-                  <DiffViewer diff={diff} />
-                ) : (
-                  <div className="flex items-center justify-center h-20 text-sm text-[var(--color-text-tertiary)]">
-                    Could not load diff &mdash; commits may not exist on GitHub
                   </div>
                 )}
               </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { Run } from "@/types/api";
 import { getAgentColor } from "@/lib/agent-colors";
 import { buildTree, layoutTree } from "@/lib/tree-layout";
@@ -15,6 +15,14 @@ const NODE_W = 220;
 const NODE_H = 68;
 const GAP_X = 28;
 const GAP_Y = 56;
+
+const MIN_ZOOM = 0.15;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 1.15;
+
+function clampZoom(z: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+}
 
 function getBestLineage(runs: Run[]): { ids: Set<string>; chains: Set<string>[] } {
   if (runs.length === 0) return { ids: new Set(), chains: [] };
@@ -50,10 +58,119 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
 
   const { ids: bestLineage, chains: bestChains } = useMemo(() => getBestLineage(runs), [runs]);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 10, y: 10 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+
+  // Use refs for zoom/pan so event handlers always see latest values
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+  zoomRef.current = zoom;
+  panRef.current = pan;
+
+  const zoomToward = useCallback((clientX: number, clientY: number, newZoom: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = clientX - rect.left;
+    const cy = clientY - rect.top;
+    const oldZoom = zoomRef.current;
+    const oldPan = panRef.current;
+    const ratio = newZoom / oldZoom;
+    setPan({ x: cx - (cx - oldPan.x) * ratio, y: cy - (cy - oldPan.y) * ratio });
+    setZoom(newZoom);
+  }, []);
+
+  const zoomToCenter = useCallback((newZoom: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    zoomToward(rect.left + rect.width / 2, rect.top + rect.height / 2, newZoom);
+  }, [zoomToward]);
+
+  // Wheel: pinch-to-zoom (ctrlKey) or pan
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        // Pinch-to-zoom or ctrl+scroll
+        const factor = e.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
+        const newZoom = clampZoom(zoomRef.current * factor);
+        zoomToward(e.clientX, e.clientY, newZoom);
+      } else {
+        // Plain scroll → pan
+        setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomToward]);
+
+  // Keyboard: Cmd/Ctrl + =/-/0
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        zoomToCenter(clampZoom(zoomRef.current * ZOOM_STEP));
+      } else if (e.key === "-") {
+        e.preventDefault();
+        zoomToCenter(clampZoom(zoomRef.current / ZOOM_STEP));
+      } else if (e.key === "0") {
+        e.preventDefault();
+        setZoom(1);
+        setPan({ x: 10, y: 10 });
+      }
+    };
+
+    el.addEventListener("keydown", onKeyDown);
+    return () => el.removeEventListener("keydown", onKeyDown);
+  }, [zoomToCenter]);
+
+  // Pointer drag-to-pan
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    // Only pan on primary button (left click)
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY, panX: panRef.current.x, panY: panRef.current.y };
+    (e.target as Element).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragStart.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    setPan({ x: dragStart.current.panX + dx, y: dragStart.current.panY + dy });
+  }, []);
+
+  const onPointerUp = useCallback(() => {
+    setIsDragging(false);
+    dragStart.current = null;
+  }, []);
+
+  const zoomPct = Math.round(zoom * 100);
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
+  const modKey = isMac ? "\u2318" : "Ctrl+";
+
   return (
-    <div className="overflow-auto h-full w-full">
-      <svg width={width} height={height} className="mx-auto block">
-        <g transform="translate(10, 10)">
+    <div
+      ref={containerRef}
+      className="overflow-hidden h-full w-full relative outline-none"
+      tabIndex={0}
+      style={{ cursor: isDragging ? "grabbing" : "grab" }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
+      <svg width="100%" height="100%">
+        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
           {/* Edges */}
           {edges.map((e, i) => {
             const x1 = e.parent.x + NODE_W / 2;
@@ -100,6 +217,21 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
           })}
         </g>
       </svg>
+
+      {/* Controls overlay */}
+      <div className="absolute bottom-3 right-3 flex items-center gap-2">
+        <div className="px-3 py-1.5 rounded-lg text-xs bg-[var(--color-layer-2)] text-[var(--color-text-secondary)] leading-normal select-none">
+          Scroll to pan · Pinch or <kbd className="font-[family-name:var(--font-ibm-plex-mono)] font-medium">{modKey}+/{modKey}&ndash;</kbd> to zoom · <kbd className="font-[family-name:var(--font-ibm-plex-mono)] font-medium">{modKey}0</kbd> reset
+        </div>
+        {zoomPct !== 100 && (
+          <button
+            onClick={() => { setZoom(1); setPan({ x: 10, y: 10 }); }}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium font-[family-name:var(--font-ibm-plex-mono)] bg-[var(--color-layer-2)] text-[var(--color-text)] hover:bg-[var(--color-border)] transition-colors"
+          >
+            {zoomPct}%
+          </button>
+        )}
+      </div>
     </div>
   );
 }
