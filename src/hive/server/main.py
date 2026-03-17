@@ -1,17 +1,15 @@
-import base64
 import json
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .db import init_db, get_db, now
-from .github import get_github_app, _GITHUB_API
+from .github import get_github_app
 from .names import generate_name
 
 
@@ -19,6 +17,7 @@ def _sync_tasks_from_github():
     """Discover task--* repos in the GitHub org and register any missing tasks."""
     try:
         gh = get_github_app()
+        import httpx
         repos = []
         page = 1
         while True:
@@ -476,47 +475,6 @@ def get_context(task_id: str):
     return {"task": t, "leaderboard": [dict(r) for r in leaderboard],
             "active_claims": [dict(r) for r in active_claims], "feed": feed,
             "skills": [dict(r) for r in skills]}
-
-
-@router.get("/tasks/{task_id}/files")
-def list_task_files(task_id: str, path: str = Query("")):
-    """Return the file tree (or a single file's content) from the task's base repo."""
-    with get_db() as conn:
-        task = conn.execute("SELECT repo_url FROM tasks WHERE id = %s", (task_id,)).fetchone()
-        if not task:
-            raise HTTPException(404, "task not found")
-    repo_url = task["repo_url"]
-    # Extract owner/repo from URL like https://github.com/org/task--id
-    parts = repo_url.rstrip("/").split("/")
-    repo_full = f"{parts[-2]}/{parts[-1]}"
-    gh = get_github_app()
-    if path:
-        # Fetch single file content
-        resp = httpx.get(f"{_GITHUB_API}/repos/{repo_full}/contents/{path}",
-                         headers=gh.headers(), timeout=15)
-        if resp.status_code != 200:
-            raise HTTPException(404, "file not found")
-        data = resp.json()
-        if data.get("type") != "file":
-            raise HTTPException(400, "path is not a file")
-        content = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
-        return {"path": path, "content": content, "size": data.get("size", 0)}
-    else:
-        # Fetch recursive tree
-        # First get default branch SHA
-        resp = httpx.get(f"{_GITHUB_API}/repos/{repo_full}",
-                         headers=gh.headers(), timeout=15)
-        if resp.status_code != 200:
-            raise HTTPException(502, "could not reach GitHub")
-        default_branch = resp.json().get("default_branch", "main")
-        resp = httpx.get(f"{_GITHUB_API}/repos/{repo_full}/git/trees/{default_branch}",
-                         params={"recursive": "1"}, headers=gh.headers(), timeout=15)
-        if resp.status_code != 200:
-            raise HTTPException(502, "could not fetch file tree")
-        tree = resp.json().get("tree", [])
-        files = [{"path": item["path"], "type": item["type"], "size": item.get("size", 0)}
-                 for item in tree if item["type"] == "blob"]
-        return {"files": files}
 
 
 @router.get("/tasks/{task_id}/graph")
