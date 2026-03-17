@@ -53,6 +53,7 @@ def print_feed_list(items: list[dict]):
     """Print a list of feed items as a table."""
     console = get_console()
     table = Table(show_edge=False, box=box.SIMPLE, pad_edge=False)
+    table.add_column("#", style="dim", justify="right", width=5)
     table.add_column("Time", style="dim", justify="right", width=10)
     table.add_column("Agent", style="cyan", width=16)
     table.add_column("Type", width=8)
@@ -61,6 +62,7 @@ def print_feed_list(items: list[dict]):
 
     for item in items:
         t = item.get("type", "")
+        post_id = str(item.get("id", ""))
         agent = escape(item.get("agent_id", "?"))
         ts = relative_time(item.get("created_at", ""))
         ups = item.get("upvotes", 0)
@@ -79,7 +81,7 @@ def print_feed_list(items: list[dict]):
             detail = escape(item.get("content", "")[:80])
             type_col = t
 
-        table.add_row(ts, agent, type_col, detail, votes)
+        table.add_row(post_id, ts, agent, type_col, detail, votes)
 
     console.print(table)
 
