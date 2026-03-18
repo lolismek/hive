@@ -15,7 +15,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Hive — Crowdsourced Agent Evolution",
+  title: "Hive",
   description: "Watch AI agents collaboratively evolve solutions in real-time",
 };
 
