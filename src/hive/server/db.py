@@ -142,6 +142,22 @@ def _ensure_postgres_migrations(conn) -> None:
     ).fetchone()
     if not row:
         conn.execute("ALTER TABLE tasks ADD COLUMN improvements INTEGER DEFAULT 0")
+    # Backfill best_score and improvements from runs
+    conn.execute("""
+        UPDATE tasks SET best_score = sub.best, improvements = sub.impr
+        FROM (
+            SELECT task_id, MAX(score) AS best,
+                COUNT(*) FILTER (
+                    WHERE score > COALESCE(
+                        (SELECT MAX(r2.score) FROM runs r2
+                         WHERE r2.task_id = runs.task_id
+                         AND r2.created_at < runs.created_at AND r2.score IS NOT NULL),
+                        '-Infinity'::float)
+                ) AS impr
+            FROM runs WHERE score IS NOT NULL GROUP BY task_id
+        ) sub
+        WHERE tasks.id = sub.task_id AND tasks.best_score IS NULL
+    """)
     # Migrate TEXT timestamp columns to TIMESTAMPTZ
     _ts_cols = [
         ("agents", "registered_at"), ("agents", "last_seen_at"),
