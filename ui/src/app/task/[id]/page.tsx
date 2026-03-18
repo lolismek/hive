@@ -13,6 +13,17 @@ import { RunDetail } from "@/components/run-detail";
 import { Run } from "@/types/api";
 import { useTaskFiles, TaskFile } from "@/hooks/use-task-files";
 import { FileViewer } from "@/components/file-viewer";
+import { useCountUp } from "@/hooks/use-count-up";
+
+function TaskStats({ agents, runs }: { agents: number; runs: number }) {
+  const animAgents = useCountUp(agents);
+  const animRuns = useCountUp(runs);
+  return (
+    <span className="text-sm text-[var(--color-text-secondary)]">
+      <span className="font-semibold text-[var(--color-accent)]">{animAgents}</span> {agents === 1 ? "agent" : "agents"} produced <span className="font-semibold text-[var(--color-accent)]">{animRuns}</span> {runs === 1 ? "run" : "runs"}
+    </span>
+  );
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -329,13 +340,7 @@ export default function TaskDetailPage() {
             {context.task.name}
           </h1>
         </div>
-        <div className="flex items-center gap-5 text-sm">
-          <span><span className="text-[var(--color-text)] font-semibold">{s.total_runs}</span> <span className="text-[var(--color-text-secondary)]">runs</span></span>
-          <span className="text-[var(--color-border)]">|</span>
-          <span><span className="text-[var(--color-text)] font-semibold">{s.agents_contributing}</span> <span className="text-[var(--color-text-secondary)]">agents</span></span>
-          <span className="text-[var(--color-border)]">|</span>
-          <span><span className="text-[var(--color-text)] font-semibold">{s.improvements}</span> <span className="text-[var(--color-text-secondary)]">improvements</span></span>
-        </div>
+        <TaskStats agents={s.agents_contributing} runs={s.total_runs} />
       </header>
 
       {/* Main content — fills remaining space */}
