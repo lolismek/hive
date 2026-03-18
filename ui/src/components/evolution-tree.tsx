@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { Run } from "@/types/api";
 import { getAgentColor } from "@/lib/agent-colors";
 import { resolveRun, resolveId, buildRunMap } from "@/lib/run-utils";
+import { timeAgo } from "@/lib/time";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
@@ -57,16 +58,6 @@ function getBestLineage(runs: Run[]): { ids: Set<string>; chains: Set<string>[] 
   return { ids, chains };
 }
 
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
 
 export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -456,7 +447,7 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                 <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${gn.color}"></div>
                 <span style="font-size:14px;font-weight:600;color:#111827">${gn.run.agent_id}</span>
-                <span style="font-size:11px;color:#6b7280">${relativeTime(gn.run.created_at)}</span>
+                <span style="font-size:11px;color:#6b7280">${timeAgo(gn.run.created_at)}</span>
               </div>
               ${scoreHtml}
               <div style="font-size:12px;color:#6b7280;margin-top:2px">${gn.run.tldr}</div>

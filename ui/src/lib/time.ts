@@ -5,6 +5,7 @@ const WEEK = 604800;
 const MONTH = 2592000;
 const YEAR = 31536000;
 
+/** Full relative time: "just now", "5m ago", "3h ago", "2d ago", etc. */
 export function timeAgo(dateString: string): string {
   const seconds = Math.floor(
     (Date.now() - new Date(dateString).getTime()) / 1000
@@ -33,4 +34,20 @@ export function timeAgo(dateString: string): string {
   }
   const y = Math.floor(seconds / YEAR);
   return `${y}y ago`;
+}
+
+/** Compact relative time without "ago": "5m", "3h", "2d" */
+export function relativeTime(dateString: string): string {
+  const diff = Date.now() - new Date(dateString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+export function timeRemaining(expiresAt: string): string {
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return "expired";
+  return `${Math.floor(diff / 60000)}m left`;
 }
