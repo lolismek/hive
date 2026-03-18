@@ -32,6 +32,7 @@ interface GraphLink {
   inLineage: boolean;
   isFromArtifact: boolean;
   siblingCount: number; // total children of the source node
+  declined: boolean; // child scored lower than parent
 }
 
 function getBestLineage(runs: Run[]): { ids: Set<string>; chains: Set<string>[] } {
@@ -110,12 +111,16 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
       });
     }
 
-    // Score range for x-positioning
+    // Score range for delta scaling
     const scores = runs.filter((r) => r.score !== null).map((r) => r.score!);
     const minScore = scores.length > 0 ? Math.min(...scores) : 0;
     const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
     const scoreRange = maxScore - minScore || 1;
-    const SPREAD_X = 1200;
+
+    // Cumulative X constants — nodes always move right
+    const BASE_STEP = 40;
+    const BONUS_STEP = 200;
+    const SMALL_STEP = 30;
 
     // Count leaves to compute GAP_Y dynamically
     let leafCount = 0;
@@ -126,33 +131,46 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
     }
     countLeaves(ARTIFACT_ID);
 
-    // Layout: X = score-based (low left, high right), Y = leaf slots (compact)
+    // Layout: X = cumulative (always left-to-right), Y = leaf slots (compact)
     const GAP_Y = Math.max(3, Math.min(28, 1500 / Math.max(leafCount, 1)));
     let leafSlot = 0;
     const posMap = new Map<string, { fx: number; fy: number }>();
 
-    function scoreToX(nodeId: string): number {
-      if (nodeId === ARTIFACT_ID) return -60;
-      const run = runById.get(nodeId);
-      if (!run || run.score === null) return 0;
-      return ((run.score - minScore) / scoreRange) * SPREAD_X;
-    }
+    function layout(nodeId: string, parentX: number, parentScore: number | null): number {
+      let fx: number;
+      if (nodeId === ARTIFACT_ID) {
+        fx = -60;
+      } else {
+        const run = runById.get(nodeId);
+        const myScore = run?.score ?? null;
+        if (myScore === null || parentScore === null) {
+          fx = parentX + BASE_STEP;
+        } else {
+          const scoreDelta = myScore - parentScore;
+          if (scoreDelta >= 0) {
+            fx = parentX + BASE_STEP + (scoreDelta / scoreRange) * BONUS_STEP;
+          } else {
+            const factor = Math.max(0.1, 1 - Math.abs(scoreDelta) / scoreRange);
+            fx = parentX + factor * SMALL_STEP;
+          }
+        }
+      }
 
-    function layout(nodeId: string): number {
       const kids = children.get(nodeId) || [];
-      const fx = scoreToX(nodeId);
+      const currentScore = nodeId === ARTIFACT_ID ? null : (runById.get(nodeId)?.score ?? null);
+
       if (kids.length === 0) {
         const fy = leafSlot * GAP_Y;
         leafSlot++;
         posMap.set(nodeId, { fx, fy });
         return fy;
       }
-      const childYs = kids.map((kid) => layout(kid));
+      const childYs = kids.map((kid) => layout(kid, fx, currentScore));
       const fy = (childYs[0] + childYs[childYs.length - 1]) / 2;
       posMap.set(nodeId, { fx, fy });
       return fy;
     }
-    layout(ARTIFACT_ID);
+    layout(ARTIFACT_ID, 0, null);
 
     // Center around y=0
     const allYs = [...posMap.values()].map((p) => p.fy);
@@ -197,6 +215,7 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
         source: ARTIFACT_ID, target: rootId,
         inLineage: false, isFromArtifact: true,
         siblingCount: rootIds.length,
+        declined: false,
       });
     }
     for (const run of runs) {
@@ -205,10 +224,13 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
       if (parentFullId && runIds.has(parentFullId)) {
         const inLineage = bestChains.some((c) => c.has(parentFullId) && c.has(run.id));
         const siblings = (children.get(parentFullId) || []).length;
+        const parentRun = runById.get(parentFullId);
+        const declined = run.score !== null && parentRun?.score !== null && parentRun?.score !== undefined && run.score < parentRun.score;
         links.push({
           source: parentFullId, target: run.id,
           inLineage, isFromArtifact: false,
           siblingCount: siblings,
+          declined,
         });
       }
     }
@@ -341,9 +363,10 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
       ctx.setLineDash([3, 2]);
     } else if (gl.inLineage) {
       const mx = (x1 + x2) / 2;
+      const lineageColor = gl.declined ? "#b9605a" : "#3f72af";
 
       // Base stroke — solid, subtle
-      ctx.strokeStyle = "#3f72af";
+      ctx.strokeStyle = lineageColor;
       ctx.lineWidth = baseWidth + 0.5;
       ctx.globalAlpha = 0.25;
       ctx.beginPath();
@@ -376,7 +399,7 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
         // Fade in at front, fade out at back
         const localT = i / steps;
         const alpha = Math.sin(localT * Math.PI) * 0.7;
-        ctx.strokeStyle = "#3f72af";
+        ctx.strokeStyle = lineageColor;
         ctx.lineWidth = baseWidth + 1.5 * Math.sin(localT * Math.PI);
         ctx.globalAlpha = alpha;
         ctx.beginPath();
@@ -388,7 +411,7 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
       ctx.restore();
       return;
     } else {
-      ctx.strokeStyle = "#94a3b8";
+      ctx.strokeStyle = gl.declined ? "#c27070" : "#94a3b8";
       ctx.lineWidth = baseWidth;
       ctx.globalAlpha = 0.3 + Math.min(gl.siblingCount * 0.05, 0.2);
     }
