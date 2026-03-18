@@ -42,8 +42,8 @@ class MockGitHubApp:
     def set_branch_protection(self, repo_full_name: str, branch: str, lock: bool = False) -> None:
         pass
 
-    def create_task_repo(self, task_id: str, tar_bytes: bytes, description: str = "") -> str:
-        repo_name = f"task--{task_id}"
+    def create_task_repo(self, task_id: str, archive_bytes: bytes, description: str = "") -> str:
+        repo_name = f"draft--{task_id}"
         self.created_repos.append((repo_name, description))
         return f"https://github.com/{self.org}/{repo_name}"
 

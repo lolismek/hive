@@ -33,12 +33,14 @@ class TestCreateTask:
         resp = _post_task(client)
         assert resp.status_code == 201
         assert resp.json()["id"] == "gsm8k"
-        assert resp.json()["repo_url"] == "https://github.com/hive-agents/task--gsm8k"
+        assert resp.json()["repo_url"] == "https://github.com/hive-agents/draft--gsm8k"
+        assert resp.json()["status"] == "draft"
 
-    def test_duplicate(self, client):
+    def test_duplicate_draft(self, client):
         _post_task(client, id="t1", name="T", description="D")
+        # Second upload to same draft is OK (idempotent repo creation)
         resp = _post_task(client, id="t1", name="T", description="D")
-        assert resp.status_code == 409
+        assert resp.status_code == 201
 
     def test_missing_fields(self, client):
         assert client.post("/api/tasks", data={}, files={"archive": ("t.tar.gz", _make_tar(), "application/gzip")}).status_code == 422

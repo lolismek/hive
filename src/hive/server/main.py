@@ -166,17 +166,10 @@ def create_task(
     config: str | None = Form(None),
 ):
     _validate_task_id(id)
-    ts = now()
-    with get_db() as conn:
-        if conn.execute("SELECT id FROM tasks WHERE id = %s", (id,)).fetchone():
-            raise HTTPException(409, "task already exists")
-        gh = get_github_app()
-        repo_url = gh.create_task_repo(id, archive.file.read(), description)
-        conn.execute(
-            "INSERT INTO tasks (id, name, description, repo_url, config, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
-            (id, name, description, repo_url, config, ts),
-        )
-    return JSONResponse({"id": id, "name": name, "repo_url": repo_url, "created_at": ts}, status_code=201)
+    gh = get_github_app()
+    repo_url = gh.create_task_repo(id, archive.file.read(), description)
+    # Task is created as draft--{id}. Not registered in DB until renamed to task--{id}.
+    return JSONResponse({"id": id, "name": name, "repo_url": repo_url, "status": "draft"}, status_code=201)
 
 
 @router.get("/tasks")
