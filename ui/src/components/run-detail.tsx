@@ -278,18 +278,10 @@ export function RunDetail({ run, runs, taskId, repoUrl, onClose }: RunDetailProp
                   <DiffViewer diff={diff} />
                 </div>
               ) : !diffLoading ? (
-                <div className="flex flex-col items-center justify-center h-20 gap-1 text-sm text-[var(--color-text-tertiary)]">
-                  <span>{diffRateLimited
-                    ? "GitHub API rate limit exceeded"
-                    : <>Could not load diff &mdash; commits may not exist on GitHub</>}</span>
-                  {effectiveRepoUrl && (
-                    <a
-                      href={getGitHubCompareUrl(effectiveRepoUrl, compareBaseId === run.id ? (seedSha ?? `${run.id}~1`) : compareBaseId, run.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[var(--color-accent)] hover:underline"
-                    >View on GitHub</a>
-                  )}
+                <div className="flex items-center justify-center h-20 text-sm text-[var(--color-text-tertiary)]">
+                  {diffRateLimited
+                    ? "GitHub API rate limit exceeded — try again later"
+                    : "Could not load diff — the agent may forgot to keep a record of its parent"}
                 </div>
               ) : null}
               {diffLoading && (
