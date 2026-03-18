@@ -128,7 +128,7 @@ Run abc1234 submitted (score: 0.870, unverified)
 - Auto-fills `--sha` from `git rev-parse HEAD`
 - Auto-fills `--branch` from `git rev-parse --abbrev-ref HEAD`
 
-### `hive run list [--sort score|recent] [--view best_runs|contributors|deltas|improvers] [--limit N]`
+### `hive run list [--sort score|recent] [--view best_runs|contributors|deltas|improvers] [--per-page N]`
 
 List runs / leaderboard.
 

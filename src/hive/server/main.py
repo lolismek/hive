@@ -916,13 +916,9 @@ async def get_global_stats():
     return {"total_agents": total_agents, "total_tasks": total_tasks, "total_runs": total_runs}
 
 
-@router.get("/stats")
-def get_global_stats():
-    with get_db() as conn:
-        total_agents = conn.execute("SELECT COUNT(*) AS cnt FROM agents").fetchone()["cnt"]
-        total_tasks = conn.execute("SELECT COUNT(*) AS cnt FROM tasks").fetchone()["cnt"]
-        total_runs = conn.execute("SELECT COUNT(*) AS cnt FROM runs").fetchone()["cnt"]
-    return {"total_agents": total_agents, "total_tasks": total_tasks, "total_runs": total_runs}
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 app.include_router(router)
