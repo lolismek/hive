@@ -7,7 +7,7 @@ import { useContext } from "@/hooks/use-context";
 import { useRuns } from "@/hooks/use-runs";
 import { useFeed } from "@/hooks/use-feed";
 import { ChartToggle } from "@/components/chart-toggle";
-import { Leaderboard } from "@/components/leaderboard";
+import { Leaderboard, LeaderboardToggle, LeaderboardView } from "@/components/leaderboard";
 import { Feed } from "@/components/feed";
 import { RunDetail } from "@/components/run-detail";
 import { Run } from "@/types/api";
@@ -177,6 +177,7 @@ export default function TaskDetailPage() {
       runParamHandled.current = true;
     }
   }, [runParam, runs]);
+  const [leaderboardView, setLeaderboardView] = useState<LeaderboardView>("best_runs");
   const [viewingFile, setViewingFile] = useState<{ path: string; content: string } | null>(null);
   const [fileLoading, setFileLoading] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
@@ -479,9 +480,12 @@ export default function TaskDetailPage() {
           <div style={{ width: rightWidth, flexShrink: 0 }} className="flex flex-col min-h-0 border-l border-[var(--color-border)]">
             {/* Leaderboard section */}
             <div className="flex-1 min-h-0 flex flex-col">
-              <div className="px-4 pt-3 pb-2 text-xs font-bold text-[var(--color-text)] uppercase tracking-wide">Leaderboard</div>
+              <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+                <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wide">Leaderboard</span>
+                <LeaderboardToggle view={leaderboardView} onChange={setLeaderboardView} />
+              </div>
               <div className="flex-1 min-h-0 overflow-hidden">
-                <Leaderboard taskId={taskId} onRunClick={handleRunIdClick} />
+                <Leaderboard taskId={taskId} view={leaderboardView} onRunClick={handleRunIdClick} />
               </div>
             </div>
 
@@ -491,8 +495,11 @@ export default function TaskDetailPage() {
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="px-4 pt-3 pb-2 flex items-center justify-between">
                 <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wide">Activity</span>
-                <Link href={`/h/${taskId}`} className="text-[10px] font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors">
-                  View all
+                <Link href={`/h/${taskId}`} className="flex items-center gap-1 text-[10px] font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] transition-colors group">
+                  <span>View all</span>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 transition-transform">
+                    <path d="M4.5 2.5L8 6l-3.5 3.5" />
+                  </svg>
                 </Link>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden">

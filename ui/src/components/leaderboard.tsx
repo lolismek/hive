@@ -1,62 +1,137 @@
 "use client";
 
 import { useLeaderboard } from "@/hooks/use-runs";
-import { Run } from "@/types/api";
-import { getAgentColor } from "@/lib/agent-colors";
+import { Run, ContributorEntry } from "@/types/api";
+import { Avatar, Score } from "@/components/shared";
+import { TabButtons } from "@/components/shared/toggle";
+
+export type LeaderboardView = "best_runs" | "contributors";
+
+const LEADERBOARD_OPTIONS: { value: LeaderboardView; label: string }[] = [
+  { value: "best_runs", label: "Score" },
+  { value: "contributors", label: "Improvements" },
+];
 
 interface LeaderboardProps {
   taskId: string;
+  view: LeaderboardView;
   onRunClick?: (runId: string) => void;
 }
 
-export function Leaderboard({ taskId, onRunClick }: LeaderboardProps) {
-  const data = useLeaderboard(taskId, "best_runs");
-  if (!data || data.view !== "best_runs") return null;
+export function Leaderboard({ taskId, view, onRunClick }: LeaderboardProps) {
+  const data = useLeaderboard(taskId, view);
 
-  // Build dense ranks: tied scores share the same rank
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {data?.view === "best_runs" && (
+          <BestScoreList runs={data.runs} onRunClick={onRunClick} />
+        )}
+        {data?.view === "contributors" && (
+          <ContributorList entries={data.entries} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function LeaderboardToggle({
+  view,
+  onChange,
+}: {
+  view: LeaderboardView;
+  onChange: (v: LeaderboardView) => void;
+}) {
+  return <TabButtons value={view} onChange={onChange} options={LEADERBOARD_OPTIONS} />;
+}
+
+function RankBadge({ rank, highlight }: { rank: number; highlight: boolean }) {
+  return (
+    <span className={`w-5 text-right shrink-0 font-[family-name:var(--font-ibm-plex-mono)] text-xs ${highlight ? "text-[#3f72af] font-semibold" : "text-[var(--color-text-tertiary)]"}`}>
+      {String(rank).padStart(2, "0")}
+    </span>
+  );
+}
+
+function buildDenseRanks<T>(items: T[], getValue: (item: T) => number | null): number[] {
   const ranks: number[] = [];
   let rank = 1;
-  for (let i = 0; i < data.runs.length; i++) {
-    if (i > 0 && data.runs[i].score !== data.runs[i - 1].score) {
+  for (let i = 0; i < items.length; i++) {
+    if (i > 0 && getValue(items[i]) !== getValue(items[i - 1])) {
       rank = i + 1;
     }
     ranks.push(rank);
   }
-  const bestScore = data.runs.length > 0 ? data.runs[0].score : null;
+  return ranks;
+}
+
+function BestScoreList({
+  runs,
+  onRunClick,
+}: {
+  runs: Pick<Run, "id" | "agent_id" | "branch" | "parent_id" | "tldr" | "score" | "verified" | "created_at" | "fork_url">[];
+  onRunClick?: (runId: string) => void;
+}) {
+  const ranks = buildDenseRanks(runs, (r) => r.score);
+  const bestScore = runs.length > 0 ? runs[0].score : null;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="pb-1 shrink-0" />
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {data.runs.map((run: Pick<Run, "id" | "agent_id" | "branch" | "parent_id" | "tldr" | "score" | "verified" | "created_at" | "fork_url">, i: number) => {
-          const isWinner = run.score !== null && run.score === bestScore;
-          return (
-            <div
-              key={run.id}
-              onClick={() => onRunClick?.(run.id)}
-              className={`flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--color-layer-1)] cursor-pointer border-b border-solid border-[var(--color-border-light)] last:border-0 transition-colors ${isWinner ? "bg-blue-50/50" : ""}`}
-            >
-              <span className={`w-5 text-right shrink-0 font-[family-name:var(--font-ibm-plex-mono)] text-xs ${isWinner ? "text-[#3f72af] font-semibold" : "text-[var(--color-text-tertiary)]"}`}>
-                {String(ranks[i]).padStart(2, "0")}
+    <>
+      {runs.map((run, i) => {
+        const isWinner = run.score !== null && run.score === bestScore;
+        return (
+          <div
+            key={run.id}
+            onClick={() => onRunClick?.(run.id)}
+            className={`flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--color-layer-1)] cursor-pointer border-b border-solid border-[var(--color-border-light)] last:border-0 transition-colors ${isWinner ? "bg-blue-50/50" : ""}`}
+          >
+            <RankBadge rank={ranks[i]} highlight={isWinner} />
+            <Avatar id={run.agent_id} size="md" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-[var(--color-text)] truncate">
+                  {run.agent_id}
+                </span>
+              </div>
+              <div className="text-xs text-[var(--color-text-tertiary)] mt-0.5 truncate">{run.tldr}</div>
+            </div>
+            <Score value={run.score} className="text-sm shrink-0 text-[var(--color-text)]" />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function ContributorList({ entries }: { entries: ContributorEntry[] }) {
+  const sorted = [...entries].sort((a, b) => b.improvements - a.improvements);
+  const ranks = buildDenseRanks(sorted, (e) => e.improvements);
+
+  return (
+    <>
+      {sorted.map((entry, i) => {
+        const isTop = ranks[i] === 1;
+        return (
+          <div
+            key={entry.agent_id}
+            className={`flex items-center gap-3 px-4 py-2.5 border-b border-solid border-[var(--color-border-light)] last:border-0 transition-colors ${isTop ? "bg-blue-50/50" : ""}`}
+          >
+            <RankBadge rank={ranks[i]} highlight={isTop} />
+            <Avatar id={entry.agent_id} size="md" />
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-semibold text-[var(--color-text)] truncate block">
+                {entry.agent_id}
               </span>
-              <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-[10px] font-bold shadow-sm" style={{ background: `linear-gradient(135deg, ${getAgentColor(run.agent_id)}, ${getAgentColor(run.agent_id)}bb)` }}>
-                {run.agent_id.split("-").map((w) => w[0]?.toUpperCase()).join("").slice(0, 2)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold text-[var(--color-text)] truncate">
-                    {run.agent_id}
-                  </span>
-                </div>
-                <div className="text-xs text-[var(--color-text-tertiary)] mt-0.5 truncate">{run.tldr}</div>
-              </div>
-              <span className="font-[family-name:var(--font-ibm-plex-mono)] text-sm font-medium tabular-nums shrink-0 text-[var(--color-text)]">
-                {run.score?.toFixed(3) ?? "—"}
+              <span className="text-xs text-[var(--color-text-tertiary)] mt-0.5 block">
+                best: <Score value={entry.best_score} className="text-xs text-[var(--color-text-tertiary)]" />
               </span>
             </div>
-          );
-        })}
-      </div>
-    </div>
+            <span className="font-[family-name:var(--font-ibm-plex-mono)] text-sm font-medium tabular-nums shrink-0 text-[var(--color-text)]">
+              {entry.improvements}
+            </span>
+          </div>
+        );
+      })}
+    </>
   );
 }
