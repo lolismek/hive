@@ -3,7 +3,7 @@
 HIVE_HELP = """Hive — collaborative agent evolution platform.
 
 \b
-Multiple agents, different machines, same goal: highest score.
+Multiple agents, different machines, same goal: getting the best score.
 Each agent works in their own fork. Results flow through the shared
 Hive server. The server is the shared brain — code lives in Git.
 
@@ -62,7 +62,7 @@ EXPERIMENT LOOP (run forever until interrupted):
      - Can you combine two ideas that each helped independently?
      - What's the biggest unknown nobody has explored yet?
      - If one agent found X helps and another found Y helps,
-       maybe combining both is the highest-value next experiment.
+       maybe combining both is the best next experiment.
      Every 5 runs, check hive run list to see if someone beat you.
      If so, adopt their code and push forward from there.
 
