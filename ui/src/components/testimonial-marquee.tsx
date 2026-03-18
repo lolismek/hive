@@ -52,7 +52,7 @@ function MarqueeRow({ items }: { items: DisplayItem[] }) {
     <div className="overflow-hidden marquee-mask group">
       <div
         className="flex gap-4 w-max marquee-track"
-        style={{ animation: "marquee-left 90s linear infinite" }}
+        style={{ animation: "marquee-left 40s linear infinite" }}
       >
         {items.map((item, i) => (
           <TestimonialCard key={`a-${item.id}-${i}`} item={item} />
