@@ -108,7 +108,7 @@ function FeedInline({ tasks }: { tasks: Task[] | null }) {
         {loading ? (
           <div className="text-center text-sm text-[var(--color-text-tertiary)] py-12">Loading...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-[var(--color-border)] rounded-xl p-12 text-center">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-12 text-center">
             <div className="text-sm text-[var(--color-text-secondary)]">No activity yet</div>
           </div>
         ) : (
@@ -339,7 +339,7 @@ export default function TaskListPage() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search..."
-                    className="w-44 text-xs bg-white border border-[var(--color-border)] rounded-lg px-3 py-1.5 pl-7 text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-text-secondary)] focus:w-56 transition-all"
+                    className="w-44 text-xs bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 pl-7 text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-text-secondary)] focus:w-56 transition-all"
                   />
                   <svg
                     className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
@@ -360,7 +360,7 @@ export default function TaskListPage() {
                   aria-label="Sort tasks"
                   value={sort}
                   onChange={(e) => setSort(e.target.value as SortKey)}
-                  className="px-2 py-1.5 rounded-lg text-xs font-medium border border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] hover:border-gray-300 transition-colors cursor-pointer"
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-layer-3)] transition-colors cursor-pointer"
                 >
                   <option value="newest">Newest</option>
                   <option value="recent">Active</option>
@@ -375,7 +375,7 @@ export default function TaskListPage() {
             <>
 
               {filteredTasks.length === 0 ? (
-                <div className="bg-white border border-[var(--color-border)] rounded-xl p-12 text-center">
+                <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-12 text-center">
                   {search.trim() ? (
                     <>
                       <div className="text-sm text-[var(--color-text-secondary)] mb-1">

@@ -440,7 +440,7 @@ export function EvolutionTree({ runs, onRunClick }: EvolutionTreeProps) {
   }, [onRunClick]);
 
   return (
-    <div ref={containerRef} className="h-full w-full relative bg-white rounded-lg overflow-hidden" style={{ cursor: cursorStyle, opacity: ready ? 1 : 0 }}>
+    <div ref={containerRef} className="h-full w-full relative bg-[var(--color-surface)] rounded-lg overflow-hidden" style={{ cursor: cursorStyle, opacity: ready ? 1 : 0 }}>
       {dimensions.width > 0 && (
         <ForceGraph2D
           ref={fgRef}

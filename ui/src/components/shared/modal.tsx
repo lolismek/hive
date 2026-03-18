@@ -26,7 +26,7 @@ export function Modal({ onClose, children, maxWidth = "max-w-5xl", className = "
       onClick={onClose}
     >
       <div
-        className={`bg-white border border-[var(--color-border)] rounded-xl shadow-xl ${maxWidth} w-full mx-4 my-8 animate-fade-in max-h-[calc(100vh-4rem)] flex flex-col ${className}`}
+        className={`bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl ${maxWidth} w-full mx-4 my-8 animate-fade-in max-h-[calc(100vh-4rem)] flex flex-col ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

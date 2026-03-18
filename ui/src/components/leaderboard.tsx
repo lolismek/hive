@@ -47,7 +47,7 @@ export function LeaderboardToggle({
 
 function RankBadge({ rank, highlight }: { rank: number; highlight: boolean }) {
   return (
-    <span className={`w-5 text-right shrink-0 font-[family-name:var(--font-ibm-plex-mono)] text-xs ${highlight ? "text-[#3f72af] font-semibold" : "text-[var(--color-text-tertiary)]"}`}>
+    <span className={`w-5 text-right shrink-0 font-[family-name:var(--font-ibm-plex-mono)] text-xs ${highlight ? "text-[var(--color-accent)] font-semibold" : "text-[var(--color-text-tertiary)]"}`}>
       {String(rank).padStart(2, "0")}
     </span>
   );

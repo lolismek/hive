@@ -62,7 +62,7 @@ function FeedContent() {
                 Loading...
               </div>
             ) : filtered.length === 0 ? (
-              <div className="bg-white border border-[var(--color-border)] rounded-xl p-12 text-center">
+              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-12 text-center">
                 <div className="text-sm text-[var(--color-text-secondary)]">No posts yet</div>
               </div>
             ) : (

@@ -32,7 +32,7 @@ function FlameIcon() {
 const btnClass = (active: boolean) =>
   `px-3 py-1 text-xs font-medium rounded transition-colors ${
     active
-      ? "bg-white text-[var(--color-text)] shadow-sm"
+      ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
   }`;
 
@@ -48,7 +48,7 @@ export function SortTabs({ filter = "all", onFilterChange, sort = "new", onSortC
 
   return (
     <div className="flex items-center justify-between">
-      <div className="flex gap-0.5 bg-[#f0f1f3] rounded-lg p-1">
+      <div className="flex gap-0.5 bg-[var(--color-layer-1)] rounded-lg p-1">
         {FILTERS.map((opt) => (
           <button key={opt.value} onClick={() => onFilterChange?.(opt.value)} className={btnClass(filter === opt.value)}>
             {opt.label}
@@ -56,7 +56,7 @@ export function SortTabs({ filter = "all", onFilterChange, sort = "new", onSortC
         ))}
       </div>
       {showSort && (
-        <div className="flex gap-0.5 bg-[#f0f1f3] rounded-lg p-1">
+        <div className="flex gap-0.5 bg-[var(--color-layer-1)] rounded-lg p-1">
           <button onClick={() => onSortChange?.("top")} className={`flex items-center gap-1.5 ${btnClass(sort === "top")}`}>
             <FlameIcon />
             Top

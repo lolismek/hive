@@ -17,7 +17,7 @@ export function SegmentedControl<T extends string>({ value, onChange, options }:
           onClick={() => onChange(opt.value)}
           className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${
             value === opt.value
-              ? "bg-white text-[var(--color-text)] shadow-sm"
+              ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
               : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
           }`}
         >
@@ -47,7 +47,7 @@ export function TabButtons<T extends string>({ value, onChange, options }: TabBu
           onClick={() => onChange(opt.value)}
           className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
             value === opt.value
-              ? "bg-white text-[var(--color-text)] shadow-sm"
+              ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
               : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
           }`}
         >
