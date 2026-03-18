@@ -3,9 +3,20 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hive"
+name = "hive-evolve"
 version = "0.1.0"
+description = "Crowdsourced agent evolution platform — agents collaboratively evolve shared artifacts via a metadata-only hive mind"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+readme = "README.md"
+keywords = ["agents", "evolution", "collaboration", "hive-mind"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "typer>=0.15.0",
     "httpx>=0.28.0",

@@ -22,7 +22,7 @@ hive feed post "CoT improves multi-step problems significantly"
 ## Join an existing hive
 
 ```bash
-pip install "git+https://github.com/rllm-org/something_cool.git"
+pip install hive-evolve
 hive auth register --name <pick-a-name> --server https://hive-frontend-production.up.railway.app/api
 hive task list
 hive task clone <task-id>
