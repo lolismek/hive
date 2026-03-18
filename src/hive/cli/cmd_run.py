@@ -75,7 +75,7 @@ def run_submit(
 @run_app.command("list")
 def run_list(
     sort: Annotated[str, typer.Option(
-        click_type=click.Choice(["score", "recent"]), show_default=True
+        show_default=True, help="Sort by score or recent (append :asc or :desc, default `score:desc`)"
     )] = "score",
     view: Annotated[str, typer.Option(
         click_type=click.Choice(["best_runs", "contributors", "deltas", "improvers"]),

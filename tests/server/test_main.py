@@ -5,6 +5,37 @@ import tarfile
 
 import pytest
 
+from hive.server.main import _parse_sort
+
+
+class TestParseSort:
+    """Unit tests for _parse_sort helper (no DB needed)."""
+
+    def test_default_desc(self):
+        assert _parse_sort("score", {"score": "r.score", "recent": "r.created_at"}) == "r.score DESC"
+
+    def test_explicit_desc(self):
+        assert _parse_sort("score:desc", {"score": "r.score", "recent": "r.created_at"}) == "r.score DESC"
+
+    def test_explicit_asc(self):
+        assert _parse_sort("score:asc", {"score": "r.score", "recent": "r.created_at"}) == "r.score ASC"
+
+    def test_case_insensitive_direction(self):
+        assert _parse_sort("score:ASC", {"score": "r.score"}) == "r.score ASC"
+        assert _parse_sort("score:Desc", {"score": "r.score"}) == "r.score DESC"
+
+    def test_invalid_direction_defaults_desc(self):
+        assert _parse_sort("score:invalid", {"score": "r.score"}) == "r.score DESC"
+
+    def test_unknown_field_falls_back_to_first(self):
+        assert _parse_sort("unknown", {"score": "r.score", "recent": "r.created_at"}) == "r.score DESC"
+
+    def test_unknown_field_with_asc(self):
+        assert _parse_sort("unknown:asc", {"score": "r.score"}) == "r.score ASC"
+
+    def test_recent_asc(self):
+        assert _parse_sort("recent:asc", {"score": "r.score", "recent": "r.created_at"}) == "r.created_at ASC"
+
 
 def _make_tar(files: dict[str, str] = None) -> io.BytesIO:
     """Create a .tar.gz in memory with optional files."""
@@ -216,6 +247,39 @@ class TestListRuns:
         assert "page" in data
         assert "per_page" in data
         assert "has_next" in data
+
+    def test_sort_score_asc(self, registered_agent, _seed_task):
+        """sort=score:asc returns lowest score first."""
+        client, _, token = registered_agent
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                     json={"sha": "asc1", "message": "m", "score": 0.9})
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                     json={"sha": "asc2", "message": "m", "score": 0.3})
+        resp = client.get("/api/tasks/t1/runs", params={"sort": "score:asc"})
+        runs = resp.json()["runs"]
+        assert runs[0]["score"] <= runs[-1]["score"]
+
+    def test_sort_score_desc_explicit(self, registered_agent, _seed_task):
+        """sort=score:desc is equivalent to sort=score (default DESC)."""
+        client, _, token = registered_agent
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                     json={"sha": "desc1", "message": "m", "score": 0.3})
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                     json={"sha": "desc2", "message": "m", "score": 0.9})
+        resp = client.get("/api/tasks/t1/runs", params={"sort": "score:desc"})
+        runs = resp.json()["runs"]
+        assert runs[0]["score"] >= runs[-1]["score"]
+
+    def test_sort_invalid_direction_defaults_desc(self, registered_agent, _seed_task):
+        """sort=score:invalid falls back to DESC."""
+        client, _, token = registered_agent
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                     json={"sha": "inv1", "message": "m", "score": 0.3})
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                     json={"sha": "inv2", "message": "m", "score": 0.9})
+        resp = client.get("/api/tasks/t1/runs", params={"sort": "score:invalid"})
+        runs = resp.json()["runs"]
+        assert runs[0]["score"] >= runs[-1]["score"]
 
     def test_task_not_found(self, client):
         resp = client.get("/api/tasks/nope/runs")
@@ -582,6 +646,18 @@ class TestSearch:
         resp = client.get("/api/tasks/t1/search", params={"type": "result", "sort": "score"})
         results = resp.json()["results"]
         assert results[0]["score"] >= results[-1]["score"]
+
+    def test_sort_recent_asc(self, registered_agent, _seed_task):
+        """sort=recent:asc returns oldest first."""
+        client, _, token = registered_agent
+        client.post("/api/tasks/t1/feed", params={"token": token},
+                     json={"type": "post", "content": "first post"})
+        client.post("/api/tasks/t1/feed", params={"token": token},
+                     json={"type": "post", "content": "second post"})
+        resp = client.get("/api/tasks/t1/search", params={"sort": "recent:asc"})
+        results = resp.json()["results"]
+        assert len(results) >= 2
+        assert results[0]["created_at"] <= results[-1]["created_at"]
 
     def test_no_results(self, registered_agent, _seed_task):
         client, _, token = registered_agent

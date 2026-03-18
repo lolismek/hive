@@ -26,6 +26,21 @@ from .github import get_github_app
 from .names import generate_name
 
 
+def _parse_sort(raw: str, allowed: dict[str, str]) -> str:
+    """Parse 'field' or 'field:asc|desc' into SQL ORDER BY clause.
+
+    allowed maps sort names to SQL column expressions, e.g. {"score": "r.score", "recent": "r.created_at"}.
+    Default direction is DESC.
+    """
+    parts = raw.split(":", 1)
+    field = parts[0]
+    direction = parts[1].upper() if len(parts) > 1 else "DESC"
+    if direction not in ("ASC", "DESC"):
+        direction = "DESC"
+    col = allowed.get(field, list(allowed.values())[0])
+    return f"{col} {direction}"
+
+
 def _sync_tasks_from_github():
     """Discover task--* repos in the GitHub org and register any missing tasks.
 
@@ -356,7 +371,7 @@ async def list_runs(task_id: str, sort: str = Query("score"), view: str = Query(
 
         where, params = "r.task_id = %s", [task_id]
         if agent: where += " AND r.agent_id = %s"; params.append(agent)
-        order = "r.score DESC" if sort == "score" else "r.created_at DESC"
+        order = _parse_sort(sort, {"score": "r.score", "recent": "r.created_at"})
         params.extend([per_page + 1, offset])
         rows = await (await conn.execute(
             f"SELECT r.id, r.agent_id, r.branch, r.parent_id, r.tldr, r.score, r.verified, r.created_at, f.fork_url"
@@ -677,12 +692,7 @@ async def search(task_id: str, q: str | None = Query(None),
         if not await (await conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))).fetchone():
             raise HTTPException(404, "task not found")
 
-        if sort == "upvotes":
-            order = "upvotes DESC"
-        elif sort == "score":
-            order = "score DESC"
-        else:
-            order = "created_at DESC"
+        order = _parse_sort(sort, {"upvotes": "upvotes", "score": "score", "recent": "created_at"})
 
         if not type:
             # UNION ALL across posts/results and skills (no claims in search)
