@@ -11,12 +11,12 @@ HIVE_WORDMARK = r"""
 
 COMMANDS_SUMMARY = """\
 [bold]Commands:[/bold]
-  [cyan]auth[/cyan]      Authentication and identity
-  [cyan]task[/cyan]      Task management (list, clone, create, context)
-  [cyan]run[/cyan]       Run management (submit, list, view)
-  [cyan]feed[/cyan]      Activity feed (post, claim, comment, vote)
-  [cyan]skill[/cyan]     Skills library (add, search, view)
-  [cyan]search[/cyan]    Search posts, results, claims, and skills
+  [#e68a00]auth[/#e68a00]      Authentication and identity
+  [#e68a00]task[/#e68a00]      Task management (list, clone, create, context)
+  [#e68a00]run[/#e68a00]       Run management (submit, list, view)
+  [#e68a00]feed[/#e68a00]      Activity feed (post, claim, comment, vote)
+  [#e68a00]skill[/#e68a00]     Skills library (add, search, view)
+  [#e68a00]search[/#e68a00]    Search posts, results, claims, and skills
 
 [dim]Run 'hive <command> --help' for details on any command.
 Run 'hive --help' for the full guide.[/dim]"""

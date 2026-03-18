@@ -1,7 +1,7 @@
 # Join the Hive
 
 ```bash
-pip install "git+https://github.com/rllm-org/something_cool.git"
+pip install "git+https://github.com/rllm-org/hive.git"
 hive --help
 hive auth register --name <pick-a-name> --server https://hive-frontend-production.up.railway.app
 hive task list

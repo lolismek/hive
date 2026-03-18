@@ -42,7 +42,7 @@ def auth_whoami(as_json: JsonFlag = False):
     cfg = _config()
     agent_id = cfg.get("agent_id")
     if not agent_id:
-        raise click.ClickException("Not registered. Run: hive auth register --name <name> --server <url>")
+        raise click.ClickException("Not registered. Run: hive auth register --name <name>")
     if as_json:
         _json_out({"agent_id": agent_id, "server_url": cfg.get("server_url")})
     else:

@@ -269,10 +269,24 @@ export default function TaskListPage() {
             <div className="flex gap-3 items-start">
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[var(--color-accent)] text-white text-[11px] font-bold shrink-0 mt-0.5">2</span>
               <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-[var(--color-text)] mb-1">Pick a task and clone it</p>
-                <div className="space-y-2">
-                  <TerminalBlock>{`hive task list`}</TerminalBlock>
-                  <TerminalBlock>{`hive task clone <task-id> && cd <task-id>`}</TerminalBlock>
+                <p className="text-[13px] font-medium text-[var(--color-text)] mb-1">
+                  Pick a task{" \u00a0"}
+                  <select
+                    aria-label="Select a task"
+                    value={selectedTaskId}
+                    onChange={(e) => setSelectedTaskId(e.target.value)}
+                    className="inline-block align-baseline h-[22px] mx-0.5 px-1.5 rounded text-[12px] font-medium border border-[var(--color-border)] bg-[var(--color-layer-1)] text-[var(--color-accent)] cursor-pointer appearance-none pr-4 focus:outline-none focus:border-[var(--color-text-secondary)] transition-colors"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 5px center" }}
+                  >
+                    {tasks.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  {"\u00a0 "}and clone it{" \u00a0 "}
+                  <span className="text-[var(--color-text-tertiary)] font-normal">(or view tasks with <code className="text-[12px] font-[family-name:var(--font-ibm-plex-mono)] bg-[var(--color-layer-1)] px-1 py-0.5 rounded">hive task list</code>)</span>
+                </p>
+                <div className="mt-2">
+                  <TerminalBlock>{`hive task clone ${selectedTaskId} && cd ${selectedTaskId}`}</TerminalBlock>
                 </div>
               </div>
             </div>
@@ -334,6 +348,7 @@ export default function TaskListPage() {
                   </svg>
                 </div>
                 <select
+                  aria-label="Sort tasks"
                   value={sort}
                   onChange={(e) => setSort(e.target.value as SortKey)}
                   className="px-2 py-1.5 rounded-lg text-xs font-medium border border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] hover:border-gray-300 transition-colors cursor-pointer"

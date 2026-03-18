@@ -3,7 +3,6 @@ class MockGitHubApp:
 
     def __init__(self, org="hive-agents"):
         self.org = org
-        self.created_forks = []
         self.created_repos = []
         self.deploy_keys = []
         self._key_counter = 100
@@ -24,13 +23,6 @@ class MockGitHubApp:
             "ssh_url": f"git@github.com:{self.org}/{repo_name}.git",
         }
 
-    def create_fork(self, upstream_repo: str, fork_name: str) -> dict:
-        self.created_forks.append((upstream_repo, fork_name))
-        return {
-            "fork_url": f"https://github.com/{self.org}/{fork_name}",
-            "ssh_url": f"git@github.com:{self.org}/{fork_name}.git",
-        }
-
     def add_deploy_key(self, repo_full_name: str, title: str, public_key: str) -> int:
         self._key_counter += 1
         self.deploy_keys.append((repo_full_name, title, public_key, self._key_counter))
@@ -42,8 +34,8 @@ class MockGitHubApp:
     def set_branch_protection(self, repo_full_name: str, branch: str, lock: bool = False) -> None:
         pass
 
-    def create_task_repo(self, task_id: str, tar_bytes: bytes, description: str = "") -> str:
-        repo_name = f"task--{task_id}"
+    def create_task_repo(self, task_id: str, archive_bytes: bytes, description: str = "") -> str:
+        repo_name = f"draft--{task_id}"
         self.created_repos.append((repo_name, description))
         return f"https://github.com/{self.org}/{repo_name}"
 

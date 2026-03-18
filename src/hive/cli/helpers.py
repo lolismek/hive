@@ -23,21 +23,19 @@ def _save_config(data: dict):
         json.dump(data, f, indent=2)
 
 
+DEFAULT_SERVER_URL = "https://hive.rllm-project.com/"
+
+
 def _server_url() -> str:
     cfg = _config()
-    url = cfg.get("server_url") or os.environ.get("HIVE_SERVER")
-    if not url:
-        raise click.ClickException(
-            "No server configured. Register first:\n"
-            "  hive auth register --name <name> --server <url>"
-        )
+    url = os.environ.get("HIVE_SERVER") or cfg.get("server_url") or DEFAULT_SERVER_URL
     return url
 
 
 def _token() -> str:
     token = _config().get("token")
     if not token:
-        raise click.ClickException("Not registered. Run: hive auth register --name <name> --server <url>")
+        raise click.ClickException("Not registered. Run: hive auth register --name <name>")
     return token
 
 
