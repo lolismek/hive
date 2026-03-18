@@ -5,17 +5,11 @@ import { ResponsiveLine } from "@nivo/line";
 import { Run } from "@/types/api";
 import { getAgentColor } from "@/lib/agent-colors";
 import { resolveRun, resolveId, buildRunMap } from "@/lib/run-utils";
+import { timeAgo } from "@/lib/time";
 
 interface ScoreChartProps {
   runs: Run[];
   onRunClick?: (run: Run) => void;
-}
-
-function relativeTime(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const hours = Math.floor(diff / 3600000);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function findBestLineage(runs: Run[]): { ids: Set<string>; chains: Set<string>[] } {
@@ -51,7 +45,7 @@ interface PointData {
 export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
   const [hoveredRun, setHoveredRun] = React.useState<{ run: Run; x: number; y: number } | null>(null);
 
-  const { lineData, allPoints, edges, lineageChains, yMin, yMax, xMax } = useMemo(() => {
+  const { lineData, allPoints, pointsByIdx, edges, lineageChains, yMin, yMax, xMax } = useMemo(() => {
     const scored = runs
       .filter((r) => r.score !== null)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
@@ -59,17 +53,17 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
 
     const linePoints = scored
       .filter((r) => lineageIds.has(r.id))
-      .map((r) => ({ x: scored.indexOf(r), y: r.score! }));
+      .map((r) => ({ x: scored.indexOf(r) + 1, y: r.score! }));
 
     const allPoints: PointData[] = scored.map((run, i) => ({
-      idx: i,
+      idx: i + 1,
       run,
       isLineage: lineageIds.has(run.id),
     }));
 
     // Build a map from run.id → index in sorted array
     const idxMap = new Map<string, number>();
-    scored.forEach((r, i) => idxMap.set(r.id, i));
+    scored.forEach((r, i) => idxMap.set(r.id, i + 1));
 
     // Collect all parent→child edges (both runs must have scores)
     const edges: { parentIdx: number; childIdx: number; isBestLineage: boolean }[] = [];
@@ -89,14 +83,18 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
     const allScores = scored.map((r) => r.score!);
     const range = Math.max(...allScores) - Math.min(...allScores);
 
+    const pointsByIdx = new Map<number, PointData>();
+    for (const p of allPoints) pointsByIdx.set(p.idx, p);
+
     return {
       lineData: [{ id: "lineage", data: linePoints }],
       allPoints,
+      pointsByIdx,
       edges,
       lineageChains,
       yMin: Math.min(...allScores) - range * 0.05,
       yMax: Math.max(...allScores) + range * 0.05,
-      xMax: scored.length - 1,
+      xMax: scored.length,
     };
   }, [runs]);
 
@@ -106,10 +104,13 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
     return (
       <g>
         {nonBestEdges.map((e, i) => {
+          const parentPt = pointsByIdx.get(e.parentIdx);
+          const childPt = pointsByIdx.get(e.childIdx);
+          if (!parentPt || !childPt) return null;
           const x1 = (xScale as (v: number) => number)(e.parentIdx);
-          const y1 = (yScale as (v: number) => number)(allPoints[e.parentIdx].run.score!);
+          const y1 = (yScale as (v: number) => number)(parentPt.run.score!);
           const x2 = (xScale as (v: number) => number)(e.childIdx);
-          const y2 = (yScale as (v: number) => number)(allPoints[e.childIdx].run.score!);
+          const y2 = (yScale as (v: number) => number)(childPt.run.score!);
           return (
             <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
               stroke="#d1d5db" strokeWidth={1} opacity={0.6} />
@@ -194,7 +195,7 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
     <div className="h-full w-full relative overflow-visible">
       <ResponsiveLine
         data={lineData}
-        xScale={{ type: "linear", min: 0, max: xMax }}
+        xScale={{ type: "linear", min: 1, max: xMax }}
         yScale={{ type: "linear", min: yMin, max: yMax }}
         margin={{ top: 4, right: 24, bottom: 40, left: 56 }}
         colors={["#3f72af"]}
@@ -215,9 +216,9 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
           tickPadding: 8,
           tickValues: (() => {
             const maxTicks = 15;
-            if (xMax + 1 <= maxTicks) return Array.from({ length: xMax + 1 }, (_, i) => i);
-            const step = Math.ceil((xMax + 1) / maxTicks);
-            return Array.from({ length: xMax + 1 }, (_, i) => i).filter((v) => v % step === 0);
+            if (xMax <= maxTicks) return Array.from({ length: xMax }, (_, i) => i + 1);
+            const step = Math.ceil(xMax / maxTicks);
+            return Array.from({ length: xMax }, (_, i) => i + 1).filter((v) => (v - 1) % step === 0);
           })(),
           format: (v) => `${v}`,
           legend: "Experiment",
@@ -258,7 +259,7 @@ export function ScoreChart({ runs, onRunClick }: ScoreChartProps) {
             <span className="text-sm font-semibold text-[var(--color-text)]">
               {hoveredRun.run.agent_id}
             </span>
-            <span className="text-[var(--color-text-secondary)] text-[11px]">{relativeTime(hoveredRun.run.created_at)}</span>
+            <span className="text-[var(--color-text-secondary)] text-[11px]">{timeAgo(hoveredRun.run.created_at)}</span>
           </div>
           <div className="font-[family-name:var(--font-ibm-plex-mono)] text-lg font-bold text-[var(--color-text)]">
             {hoveredRun.run.score?.toFixed(3)}

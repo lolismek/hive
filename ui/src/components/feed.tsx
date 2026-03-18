@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { FeedItem, ResultFeedItem, PostFeedItem, ClaimFeedItem, Comment, Skill } from "@/types/api";
-import { getAgentColor } from "@/lib/agent-colors";
+import { Avatar } from "@/components/shared/avatar";
+import { ActivityIcon } from "@/components/shared/activity-icon";
+import { Score } from "@/components/shared/score";
+import { CompactTabs, TabButtons } from "@/components/shared/toggle";
+import { relativeTime, timeRemaining } from "@/lib/time";
 
 type SkillSummary = Pick<Skill, "id" | "name" | "description" | "score_delta" | "upvotes">;
 
@@ -16,41 +20,10 @@ interface FeedProps {
 
 type FilterType = "all" | "result" | "post" | "claim" | "skill";
 
-function relativeTime(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
-function timeRemaining(expiresAt: string) {
-  const diff = new Date(expiresAt).getTime() - Date.now();
-  if (diff <= 0) return "expired";
-  return `${Math.floor(diff / 60000)}m left`;
-}
-
-export function Avatar({ id }: { id: string }) {
-  const color = getAgentColor(id);
-  const initials = id.split("-").filter(Boolean).map((w) => w[0]?.toUpperCase() ?? "").join("");
-  return (
-    <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-sm"
-      style={{ background: `linear-gradient(135deg, ${color}, ${color}dd)` }}>
-      {initials}
-    </div>
-  );
-}
-
+// Re-export shared components for backwards compatibility with post-detail-modal
+export { Avatar };
 export function SmallAvatar({ id }: { id: string }) {
-  const color = getAgentColor(id);
-  const initials = id.split("-").filter(Boolean).map((w) => w[0]?.toUpperCase() ?? "").join("");
-  return (
-    <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[8px] font-bold shrink-0"
-      style={{ backgroundColor: color }}>
-      {initials}
-    </div>
-  );
+  return <Avatar id={id} size="sm" />;
 }
 
 export function CommentList({ comments, onReply }: { comments: Comment[]; onReply?: (commentId: number) => void }) {
@@ -69,7 +42,7 @@ export function CommentList({ comments, onReply }: { comments: Comment[]; onRepl
       {topLevel.map((c) => (
         <div key={c.id}>
           <div className="flex gap-2">
-            <SmallAvatar id={c.agent_id} />
+            <Avatar id={c.agent_id} size="sm" />
             <div className="text-[11px] leading-relaxed pt-0.5">
               <span className="text-sm font-semibold text-[var(--color-text)]">{c.agent_id}</span>
               <span className="text-[var(--color-text-secondary)] ml-1.5">{c.content}</span>
@@ -80,7 +53,7 @@ export function CommentList({ comments, onReply }: { comments: Comment[]; onRepl
           </div>
           {repliesByParent.get(c.id)?.map((reply) => (
             <div key={reply.id} className="flex gap-2 ml-8 mt-1.5">
-              <SmallAvatar id={reply.agent_id} />
+              <Avatar id={reply.agent_id} size="sm" />
               <div className="text-[11px] leading-relaxed pt-0.5">
                 <span className="text-sm font-semibold text-[var(--color-text)]">{reply.agent_id}</span>
                 <span className="text-[var(--color-text-secondary)] ml-1.5">{reply.content}</span>
@@ -137,9 +110,7 @@ function ResultCard({ item, onRunClick }: { item: ResultFeedItem; onRunClick?: (
       <div className="mt-3 bg-[var(--color-layer-1)] rounded p-4 border border-[var(--color-border)]">
         <div className="flex items-baseline justify-between mb-1">
           <span className="text-sm text-[var(--color-text)]">{item.tldr}</span>
-          <span className="font-[family-name:var(--font-ibm-plex-mono)] text-lg font-bold text-[var(--color-text)] tabular-nums">
-            {item.score?.toFixed(3) ?? "—"}
-          </span>
+          <Score value={item.score} className="text-lg font-bold text-[var(--color-text)]" />
         </div>
         <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed line-clamp-2">{item.content}</div>
       </div>
@@ -193,52 +164,13 @@ function ClaimCard({ item }: { item: ClaimFeedItem }) {
   );
 }
 
-const FILTERS: { key: FilterType; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "result", label: "Runs" },
-  { key: "post", label: "Posts" },
-  { key: "claim", label: "Claims" },
-  { key: "skill", label: "Skills" },
+const FILTERS: { value: FilterType; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "result", label: "Runs" },
+  { value: "post", label: "Posts" },
+  { value: "claim", label: "Claims" },
+  { value: "skill", label: "Skills" },
 ];
-
-function ActivityIcon({ type }: { type: string }) {
-  const cls = "w-7 h-7 rounded-full flex items-center justify-center shrink-0 border";
-  if (type === "result") {
-    return (
-      <div className={`${cls} bg-[var(--color-layer-2)] border-[var(--color-border)]`}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-text-secondary)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M2 11l3-4 2.5 2L10 5l2-2" />
-        </svg>
-      </div>
-    );
-  }
-  if (type === "post") {
-    return (
-      <div className={`${cls} bg-[var(--color-layer-2)] border-[var(--color-border)]`}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-text-secondary)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 3.5h8v5H5.5L3 10.5v-7z" />
-        </svg>
-      </div>
-    );
-  }
-  if (type === "claim") {
-    return (
-      <div className={`${cls} bg-[var(--color-layer-2)] border-dashed border-[var(--color-border)]`}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="var(--color-text-secondary)" strokeWidth="1.2" strokeLinecap="round">
-          <circle cx="6" cy="6" r="4.5" />
-          <path d="M6 3.5v3l2 1" />
-        </svg>
-      </div>
-    );
-  }
-  return (
-    <div className={`${cls} bg-[var(--color-layer-2)] border-[var(--color-border)]`}>
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-text-secondary)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M7 2l1.5 3H12l-2.5 2.5 1 3.5L7 9l-3.5 2 1-3.5L2 5h3.5z" />
-      </svg>
-    </div>
-  );
-}
 
 function CompactSkillItem({ skill }: { skill: SkillSummary }) {
   return (
@@ -275,9 +207,7 @@ function CompactItem({ item, onRunClick, taskId }: { item: FeedItem; onRunClick?
             <span>{relativeTime(item.created_at)}</span>
           </div>
         </div>
-        <span className="font-[family-name:var(--font-ibm-plex-mono)] text-sm font-medium text-[var(--color-text)] tabular-nums shrink-0">
-          {item.score?.toFixed(3) ?? "—"}
-        </span>
+        <Score value={item.score} className="text-sm text-[var(--color-text)] shrink-0" />
       </div>
     );
     if (postHref) {
@@ -335,22 +265,13 @@ export function Feed({ items, skills = [], onRunClick, compact, taskId }: FeedPr
     skill: skills.length,
   };
 
-  const compactFilters = FILTERS.filter((f) => f.key === "all" || counts[f.key] > 0);
+  const compactFilters = FILTERS.filter((f) => f.value === "all" || counts[f.value] > 0);
 
   if (compact) {
     return (
       <div className="h-full flex flex-col overflow-hidden">
         <div className="flex items-center gap-1 px-3 py-2 shrink-0 overflow-x-auto">
-          {compactFilters.map((f) => (
-            <button key={f.key} onClick={() => setFilter(f.key)}
-              className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all whitespace-nowrap ${
-                filter === f.key
-                  ? "bg-[var(--color-text)] text-white"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-layer-2)]"
-              }`}>
-              {f.label}
-            </button>
-          ))}
+          <CompactTabs value={filter} onChange={setFilter} options={compactFilters} />
         </div>
         <div className="flex-1 overflow-y-auto min-h-0">
           {filter === "skill" ? (
@@ -373,15 +294,11 @@ export function Feed({ items, skills = [], onRunClick, compact, taskId }: FeedPr
     <div>
       <div className="flex items-center gap-2 mb-4">
         <span className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mr-1">Feed</span>
-        {FILTERS.map((f) => (
-          <button key={f.key} onClick={() => setFilter(f.key)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-              filter === f.key ? "bg-[var(--color-accent-50)] text-[var(--color-accent-700)]" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-layer-1)]"
-            }`}>
-            {f.label}
-            <span className="ml-1 opacity-50">{counts[f.key]}</span>
-          </button>
-        ))}
+        <TabButtons
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS.map((f) => ({ ...f, count: counts[f.value] }))}
+        />
       </div>
       <div className="space-y-3">
         {filter === "skill" && skills.map((s, i) => (
