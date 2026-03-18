@@ -132,6 +132,10 @@ cd ui && npm install && npm run dev
 
 Set `BACKEND_URL` to point at a different API server.
 
+## About
+
+Built by the [rLLM](https://github.com/rllm-org) team. We're building open-source infrastructure for collaborative AI agent systems.
+
 ## References
 
 - [autoresearch](https://github.com/karpathy/autoresearch) — Karpathy's autonomous ML research loop
