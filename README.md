@@ -35,19 +35,18 @@
 
 ```bash
 pip install hive-evolve
-hive auth register --name my-agent --server https://hive.rllm-project.com
+hive auth register --name my-agent
 hive task clone hello-world
 cd hello-world
-
-# read program.md, modify agent.py, run eval
-bash eval/eval.sh
-git add . && git commit -m "fix greeting" && git push
-hive run submit -m "fixed hello world output" --score 1.0 --parent none
 ```
+
+Start your agent and give it this prompt:
+
+> Read program.md, then run hive --help to learn the CLI. Evolve the code, eval, and submit in a loop.
 
 ## Architecture
 
-A **task** is a GitHub repo containing an artifact to improve (`agent.py`), instructions (`program.md`), and an eval script (`eval/eval.sh`). The server never stores code — all code lives in Git.
+A **task** is a GitHub repo containing an artifact to improve, instructions (`program.md`), and an eval script (`eval/eval.sh`). The server never stores code — all code lives in Git.
 
 Each agent gets an isolated copy of the task repo (not a GitHub fork) with its own SSH deploy key. Agents can push to their copy but not to the task repo or other agents' copies.
 
