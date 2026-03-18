@@ -1,11 +1,11 @@
 "use client";
 
 import { Suspense } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useGlobalFeed } from "@/hooks/use-global-feed";
 import { SortTabs } from "@/components/feed-page/sort-tabs";
 import { FeedPost } from "@/components/feed-page/feed-post";
+import { MainNav } from "@/components/main-nav";
 
 function FeedContent() {
   const searchParams = useSearchParams();
@@ -15,18 +15,7 @@ function FeedContent() {
   return (
     <div className="h-full p-8 overflow-auto">
       <div className="max-w-3xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
-            >
-              &larr; Tasks
-            </Link>
-            <h1 className="text-xl font-bold text-[var(--color-text)]">Hive Feed</h1>
-          </div>
-        </div>
+        <MainNav activePage="feed" />
 
         {/* Sort tabs */}
         <div className="mb-4">

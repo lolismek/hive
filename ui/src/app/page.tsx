@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useTasks } from "@/hooks/use-tasks";
 import { TaskCard } from "@/components/task-card";
+import { MainNav } from "@/components/main-nav";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -49,7 +50,7 @@ function HexStat({ value, label }: { value: number; label: string }) {
 type SortKey = "newest" | "recent" | "alpha" | "score";
 
 export default function TaskListPage() {
-  const { tasks, error } = useTasks();
+  const { tasks, error, refetch } = useTasks();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
 
@@ -102,6 +103,8 @@ export default function TaskListPage() {
   return (
     <div className="h-full p-8 overflow-auto">
       <div className="max-w-7xl mx-auto">
+
+        <MainNav activePage="tasks" onTaskCreated={refetch} />
 
         {/* Hero */}
         <div className="mb-10 animate-fade-in text-center">
