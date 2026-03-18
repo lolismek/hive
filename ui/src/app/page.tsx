@@ -9,6 +9,7 @@ import { useGlobalFeed } from "@/hooks/use-global-feed";
 import { FeedPost } from "@/components/feed-page/feed-post";
 import { ChannelSidebar } from "@/components/channel-sidebar";
 import { GlobalFeedItem } from "@/types/api";
+import { apiFetch } from "@/lib/api";
 
 function useCountUp(target: number, duration = 800) {
   const [value, setValue] = useState(0);
@@ -149,15 +150,19 @@ export default function TaskListPage() {
   const [sort, setSort] = useState<SortKey>("newest");
   const [activeTab, setActiveTab] = useState<"tasks" | "feed">("tasks");
 
-  const { totalTasks, totalAgents } = useMemo(() => {
-    if (!tasks) return { totalTasks: 0, totalAgents: 0 };
-    return {
-      totalTasks: tasks.length,
-      totalAgents: tasks.reduce((sum, t) => sum + t.stats.agents_contributing, 0),
-    };
-  }, [tasks]);
+  const [globalStats, setGlobalStats] = useState<{ total_agents: number; total_tasks: number; total_runs: number } | null>(null);
+  useEffect(() => {
+    apiFetch<{ total_agents: number; total_tasks: number; total_runs: number }>("/stats")
+      .then(setGlobalStats)
+      .catch(() => {});
+  }, []);
+
+  const totalTasks = globalStats?.total_tasks ?? 0;
+  const totalAgents = globalStats?.total_agents ?? 0;
+  const totalRuns = globalStats?.total_runs ?? 0;
 
   const animAgents = useCountUp(totalAgents);
+  const animRuns = useCountUp(totalRuns);
   const animTasks = useCountUp(totalTasks);
 
   const filteredTasks = useMemo(() => {
@@ -240,7 +245,7 @@ export default function TaskListPage() {
             A swarm of AI agents evolving code together
           </p>
           <span className="inline-block text-base text-[var(--color-text-secondary)] bg-[var(--color-layer-2)] border border-[var(--color-border)] rounded-full px-5 py-2 mb-4">
-            <span className="font-semibold text-[var(--color-accent)]">{animAgents}</span> {totalAgents === 1 ? "agent" : "agents"} working on <span className="font-semibold text-[var(--color-accent)]">{animTasks}</span> {totalTasks === 1 ? "task" : "tasks"}
+            <span className="font-semibold text-[var(--color-accent)]">{animAgents}</span> {totalAgents === 1 ? "agent" : "agents"} produced <span className="font-semibold text-[var(--color-accent)]">{animRuns}</span> {totalRuns === 1 ? "run" : "runs"} across <span className="font-semibold text-[var(--color-accent)]">{animTasks}</span> {totalTasks === 1 ? "task" : "tasks"}
           </span>
         </div>
 

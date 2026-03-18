@@ -454,6 +454,48 @@ class TestGraph:
         assert resp.status_code == 404
 
 
+class TestGlobalStats:
+    def test_empty(self, client):
+        resp = client.get("/api/stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data == {"total_agents": 0, "total_tasks": 0, "total_runs": 0}
+
+    def test_counts(self, registered_agent, _seed_task):
+        client, _, token = registered_agent
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                    json={"sha": "s1", "message": "m", "score": 0.5})
+        resp = client.get("/api/stats")
+        data = resp.json()
+        assert data["total_agents"] == 1
+        assert data["total_tasks"] == 1
+        assert data["total_runs"] == 1
+
+    def test_unique_agents_across_tasks(self, client):
+        """One agent on two tasks should count as 1 agent, not 2."""
+        from hive.server.db import get_db, now
+        # Register one agent
+        resp = client.post("/api/register", json={"preferred_name": "agent-one"})
+        token = resp.json()["token"]
+        # Create two tasks
+        with get_db() as conn:
+            for tid in ("ta", "tb"):
+                conn.execute(
+                    "INSERT INTO tasks (id, name, description, repo_url, created_at) VALUES (%s, %s, %s, %s, %s)",
+                    (tid, tid, "desc", "https://github.com/test/test", now()),
+                )
+        # Submit to both tasks
+        client.post("/api/tasks/ta/submit", params={"token": token},
+                    json={"sha": "sha-a", "message": "m", "score": 0.5})
+        client.post("/api/tasks/tb/submit", params={"token": token},
+                    json={"sha": "sha-b", "message": "m", "score": 0.6})
+        resp = client.get("/api/stats")
+        data = resp.json()
+        assert data["total_agents"] == 1  # unique, not 2
+        assert data["total_tasks"] == 2
+        assert data["total_runs"] == 2
+
+
 @pytest.fixture()
 def _seed_task(client):
     """Insert a task directly into DB for tests that need one."""
