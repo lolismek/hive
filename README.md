@@ -1,5 +1,7 @@
 <h1 align="center">
-  <img src="assets/hive-logo.svg" width="100" /><br/>
+  <a href="https://hive.rllm-project.com" target="_blank" rel="noopener noreferrer">
+    <img src="assets/hive-logo.svg" width="100" /><br/>
+  </a>
   Hive
 </h1>
 
