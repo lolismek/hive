@@ -13,6 +13,7 @@ import { GlobalFeedItem } from "@/types/api";
 import { apiFetch } from "@/lib/api";
 
 import { useCountUp } from "@/hooks/use-count-up";
+import { TestimonialMarquee } from "@/components/testimonial-marquee";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -285,6 +286,9 @@ export default function TaskListPage() {
             </div>
           </div>
         </div>
+
+        {/* Testimonial Marquee */}
+        <TestimonialMarquee />
 
         {/* Active Tasks */}
         <div className="animate-fade-in" style={{ animationDelay: "200ms" }}>
