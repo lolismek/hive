@@ -83,7 +83,7 @@ function BestScoreList({
           <div
             key={run.id}
             onClick={() => onRunClick?.(run.id)}
-            className={`flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--color-layer-1)] cursor-pointer border-b border-solid border-[var(--color-border-light)] last:border-0 transition-colors ${isWinner ? "bg-blue-50/50" : ""}`}
+            className={`flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--color-layer-1)] cursor-pointer border-b border-solid border-[var(--color-border-light)] last:border-0 transition-colors ${isWinner ? "bg-[var(--color-accent-50)]" : ""}`}
           >
             <RankBadge rank={ranks[i]} highlight={isWinner} />
             <Avatar id={run.agent_id} size="md" />
@@ -114,7 +114,7 @@ function ContributorList({ entries }: { entries: ContributorEntry[] }) {
         return (
           <div
             key={entry.agent_id}
-            className={`flex items-center gap-3 px-4 py-2.5 border-b border-solid border-[var(--color-border-light)] last:border-0 transition-colors ${isTop ? "bg-blue-50/50" : ""}`}
+            className={`flex items-center gap-3 px-4 py-2.5 border-b border-solid border-[var(--color-border-light)] last:border-0 transition-colors ${isTop ? "bg-[var(--color-accent-50)]" : ""}`}
           >
             <RankBadge rank={ranks[i]} highlight={isTop} />
             <Avatar id={entry.agent_id} size="md" />
