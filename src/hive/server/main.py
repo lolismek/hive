@@ -178,7 +178,8 @@ async def list_tasks(q: str | None = Query(None), page: int = Query(1), per_page
         params.extend([per_page + 1, offset])
         rows = await (await conn.execute(
             f"SELECT t.*, COUNT(r.id) AS total_runs, MAX(r.score) AS best_score_calc,"
-            f" COUNT(DISTINCT r.agent_id) AS agents_contributing"
+            f" COUNT(DISTINCT r.agent_id) AS agents_contributing,"
+            f" GREATEST(MAX(r.created_at), (SELECT MAX(p.created_at) FROM posts p WHERE p.task_id = t.id)) AS last_activity"
             f" FROM tasks t LEFT JOIN runs r ON r.task_id = t.id"
             f" WHERE {where} GROUP BY t.id ORDER BY t.created_at DESC"
             f" LIMIT %s OFFSET %s", params
@@ -193,6 +194,7 @@ async def list_tasks(q: str | None = Query(None), page: int = Query(1), per_page
                 "best_score": d.get("best_score") if d.get("best_score") is not None else d.pop("best_score_calc"),
                 "agents_contributing": d.pop("agents_contributing"),
                 "improvements": d.get("improvements", 0),
+                "last_activity": d.pop("last_activity", None),
             }
             d.pop("best_score_calc", None)
             d["stats"] = stats
@@ -211,7 +213,10 @@ async def get_task(task_id: str):
             except Exception: pass
         total_runs = (await (await conn.execute("SELECT COUNT(*) AS cnt FROM runs WHERE task_id = %s", (task_id,))).fetchone())["cnt"]
         agents_contributing = (await (await conn.execute("SELECT COUNT(DISTINCT agent_id) AS cnt FROM runs WHERE task_id = %s", (task_id,))).fetchone())["cnt"]
-        last_activity = (await (await conn.execute("SELECT MAX(created_at) AS val FROM runs WHERE task_id = %s", (task_id,))).fetchone())["val"]
+        last_activity = (await (await conn.execute(
+            "SELECT GREATEST((SELECT MAX(created_at) FROM runs WHERE task_id = %s),"
+            " (SELECT MAX(created_at) FROM posts WHERE task_id = %s)) AS val", (task_id, task_id)
+        )).fetchone())["val"]
         total_posts = (await (await conn.execute("SELECT COUNT(*) AS cnt FROM posts WHERE task_id = %s", (task_id,))).fetchone())["cnt"]
         total_skills = (await (await conn.execute("SELECT COUNT(*) AS cnt FROM skills WHERE task_id = %s", (task_id,))).fetchone())["cnt"]
         t["stats"] = {
@@ -646,7 +651,10 @@ async def get_context(task_id: str):
             except Exception: pass
         total_runs = (await (await conn.execute("SELECT COUNT(*) AS cnt FROM runs WHERE task_id = %s", (task_id,))).fetchone())["cnt"]
         agents_contributing = (await (await conn.execute("SELECT COUNT(DISTINCT agent_id) AS cnt FROM runs WHERE task_id = %s", (task_id,))).fetchone())["cnt"]
-        last_activity = (await (await conn.execute("SELECT MAX(created_at) AS val FROM runs WHERE task_id = %s", (task_id,))).fetchone())["val"]
+        last_activity = (await (await conn.execute(
+            "SELECT GREATEST((SELECT MAX(created_at) FROM runs WHERE task_id = %s),"
+            " (SELECT MAX(created_at) FROM posts WHERE task_id = %s)) AS val", (task_id, task_id)
+        )).fetchone())["val"]
         t["stats"] = {
             "total_runs": total_runs,
             "improvements": t.get("improvements", 0),
