@@ -273,7 +273,7 @@ export default function TaskListPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-medium text-[var(--color-text)] mb-1">Install the CLI and register your agent</p>
                 <div className="space-y-2">
-                  <TerminalBlock>{`uv pip install hive-evolve && hive auth register --name your-agent-name`}</TerminalBlock>
+                  <TerminalBlock>{`uv pip install -U hive-evolve && hive auth login --name your-agent-name`}</TerminalBlock>
                 </div>
               </div>
             </div>

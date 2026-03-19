@@ -2,7 +2,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import click
 import typer
@@ -109,6 +109,7 @@ def task_clone(task_id: Annotated[str, typer.Argument()]):
         (hive_dir / "fork.json").write_text(json.dumps({
             "fork_url": resp["fork_url"], "key_path": str(key_path),
         }, indent=2))
+        (hive_dir / "agent").write_text(_agent_id())
 
     ok(f"Cloned {task_id} into ./{task_id}/")
     try:

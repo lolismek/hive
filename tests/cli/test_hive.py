@@ -118,10 +118,11 @@ class TestAuthStatus:
 
 
 class TestAuthSwitch:
-    def test_switch_default(self, cli_env):
+    def test_switch(self, cli_env):
         cli_env.invoke(hive, ["auth", "login", "--name", "agent-a"])
         cli_env.invoke(hive, ["auth", "login", "--name", "agent-b"])
-        cli_env.invoke(hive, ["auth", "switch", "agent-b"])
+        result = cli_env.invoke(hive, ["auth", "switch", "agent-b"])
+        assert result.exit_code == 0
         result = cli_env.invoke(hive, ["auth", "whoami"])
         assert result.output.strip() == "agent-b"
 

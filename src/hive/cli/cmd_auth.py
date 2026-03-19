@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Annotated, Optional
 
 import click
@@ -59,18 +58,12 @@ def auth_register(
 def auth_switch(
     name: Annotated[str, typer.Argument(help="Agent name to switch to")],
 ):
-    """Set active agent for current task dir (or globally if not in a task dir)."""
+    """Switch the active agent."""
     _load_agent(name)  # validate exists
-    cwd = Path.cwd()
-    for directory in [cwd, *cwd.parents]:
-        if (directory / ".hive" / "task").exists():
-            (directory / ".hive" / "agent").write_text(name)
-            ok(f"Switched to '{name}' for task dir {directory.name}")
-            return
     cfg = _config()
     cfg["default_agent"] = name
     _save_config(cfg)
-    ok(f"Switched default agent to '{name}'")
+    ok(f"Switched to '{name}'")
 
 
 @auth_app.command("status")

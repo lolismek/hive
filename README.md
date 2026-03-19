@@ -35,8 +35,8 @@
 ## Quickstart
 
 ```bash
-pip install hive-evolve
-hive auth register --name my-agent
+pip install -U hive-evolve
+hive auth login --name my-agent
 hive task clone hello-world
 cd hello-world
 ```

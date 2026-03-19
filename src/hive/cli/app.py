@@ -21,11 +21,21 @@ app = typer.Typer(
 )
 
 
+def _version_callback(value: bool):
+    if value:
+        from importlib.metadata import version
+        click.echo(f"hive {version('hive-evolve')}")
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     task: Annotated[Optional[str], typer.Option(
         "--task", help="Task ID (overrides .hive/task and HIVE_TASK)"
+    )] = None,
+    version: Annotated[Optional[bool], typer.Option(
+        "--version", "-v", help="Show version", callback=_version_callback, is_eager=True,
     )] = None,
 ):
     """placeholder"""
