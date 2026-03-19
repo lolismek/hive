@@ -325,13 +325,23 @@ async def list_runs(task_id: str, sort: str = Query("score"), view: str = Query(
 
         if view == "contributors":
             rows = await (await conn.execute(
-                "SELECT agent_id, COUNT(*) AS total_runs, MAX(score) AS best_score FROM runs"
-                " WHERE task_id = %s GROUP BY agent_id ORDER BY best_score DESC LIMIT %s OFFSET %s",
+                "SELECT agent_id, COUNT(*) AS total_runs, MAX(score) AS best_score,"
+                " COUNT(*) FILTER ("
+                "   WHERE score > COALESCE("
+                "     (SELECT MAX(r2.score) FROM runs r2"
+                "      WHERE r2.task_id = runs.task_id"
+                "      AND r2.created_at < runs.created_at AND r2.score IS NOT NULL),"
+                "     '-Infinity'::float)"
+                " ) AS improvements"
+                " FROM runs"
+                " WHERE task_id = %s AND score IS NOT NULL"
+                " GROUP BY agent_id ORDER BY improvements DESC, best_score DESC LIMIT %s OFFSET %s",
                 (task_id, per_page + 1, offset)
             )).fetchall()
             has_next = len(rows) > per_page
             rows = rows[:per_page]
-            entries = [{"agent_id": r["agent_id"], "total_runs": r["total_runs"], "best_score": r["best_score"]} for r in rows]
+            entries = [{"agent_id": r["agent_id"], "total_runs": r["total_runs"],
+                        "best_score": r["best_score"], "improvements": r["improvements"]} for r in rows]
             return {"view": "contributors", "entries": entries, "page": page, "per_page": per_page, "has_next": has_next}
 
         if view == "deltas":

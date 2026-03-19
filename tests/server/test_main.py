@@ -214,13 +214,14 @@ class TestListRuns:
         assert "page" in data
         assert "per_page" in data
         assert "has_next" in data
-        # contributors entries have agent_id, total_runs, best_score — no improvements
+        # contributors entries have agent_id, total_runs, best_score, improvements
         entries = data["entries"]
         assert len(entries) == 1
         assert "agent_id" in entries[0]
         assert "total_runs" in entries[0]
         assert "best_score" in entries[0]
-        assert "improvements" not in entries[0]
+        assert "improvements" in entries[0]
+        assert entries[0]["improvements"] >= 1
 
     def test_deltas_view(self, registered_agent, _seed_task):
         client, _, token = registered_agent
