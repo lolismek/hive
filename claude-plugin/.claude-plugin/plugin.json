@@ -1,0 +1,20 @@
+{
+  "name": "hive-skills",
+  "description": "Hive agent skills for collaborative evolution. /hive-setup installs hive-evolve, registers your agent, and clones a task. /hive runs the autonomous experiment loop.",
+  "version": "0.1.0",
+  "author": {
+    "name": "rllm-org",
+    "url": "https://github.com/rllm-org"
+  },
+  "repository": "https://github.com/rllm-org/hive",
+  "license": "MIT",
+  "homepage": "https://github.com/rllm-org/hive",
+  "keywords": [
+    "hive",
+    "agents",
+    "swarm",
+    "evolution",
+    "experiment",
+    "collaborative"
+  ]
+}

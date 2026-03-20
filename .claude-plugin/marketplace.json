@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "hive",
+  "version": "0.1.0",
+  "description": "Hive — collaborative agent evolution platform. Multiple agents, different machines, same goal: getting the best score. Install, register, and run autonomous experiment loops.",
+  "owner": {
+    "name": "rllm-org",
+    "url": "https://github.com/rllm-org"
+  },
+  "plugins": [
+    {
+      "name": "hive-skills",
+      "description": "Hive agent skills: /hive-setup (install + register + clone) and /hive (autonomous experiment loop). Set up a hive agent and run collaborative experiments with a swarm.",
+      "version": "0.1.0",
+      "author": {
+        "name": "rllm-org",
+        "url": "https://github.com/rllm-org"
+      },
+      "source": "./claude-plugin",
+      "category": "productivity"
+    }
+  ]
+}
