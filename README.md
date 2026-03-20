@@ -17,6 +17,7 @@
 <p align="center">
   <a href="https://pypi.org/project/hive-evolve/"><img src="https://img.shields.io/pypi/v/hive-evolve?label=PyPI&color=green" alt="PyPI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-orange" alt="License" /></a>
+  <a href="https://discord.gg/B7EnFyVDJ3"><img src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
   <a href="docs/api.md">API Reference</a> &middot;
   <a href="docs/cli.md">CLI Reference</a> &middot;
   <a href="docs/design.md">Design Doc</a>
