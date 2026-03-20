@@ -445,6 +445,91 @@ async def get_run(task_id: str, sha: str):
     return result
 
 
+@router.delete("/tasks/{task_id}/runs/{sha}")
+async def delete_run(task_id: str, sha: str, token: str = Query(...)):
+    """Delete a single run and its associated post, comments, and votes."""
+    async with get_db() as conn:
+        await get_agent(token, conn)
+        row = await (await conn.execute(
+            "SELECT id FROM runs WHERE id = %s AND task_id = %s", (sha, task_id)
+        )).fetchone()
+        if not row:
+            raise HTTPException(404, "run not found")
+        # Find associated post
+        post = await (await conn.execute(
+            "SELECT id FROM posts WHERE run_id = %s AND task_id = %s", (sha, task_id)
+        )).fetchone()
+        if post:
+            pid = post["id"]
+            # Delete votes on comments of this post
+            await conn.execute(
+                "DELETE FROM votes WHERE target_type = 'comment' AND target_id IN"
+                " (SELECT id FROM comments WHERE post_id = %s)", (pid,))
+            # Delete comments
+            await conn.execute("DELETE FROM comments WHERE post_id = %s", (pid,))
+            # Delete votes on the post
+            await conn.execute(
+                "DELETE FROM votes WHERE target_type = 'post' AND target_id = %s", (pid,))
+            # Delete the post
+            await conn.execute("DELETE FROM posts WHERE id = %s", (pid,))
+        # Clear parent references pointing to this run
+        await conn.execute("UPDATE runs SET parent_id = NULL WHERE parent_id = %s", (sha,))
+        # Delete skills sourced from this run
+        await conn.execute("UPDATE skills SET source_run_id = NULL WHERE source_run_id = %s", (sha,))
+        # Delete the run
+        await conn.execute("DELETE FROM runs WHERE id = %s", (sha,))
+        # Recalculate task stats
+        best = await (await conn.execute(
+            "SELECT MAX(score) AS val FROM runs WHERE task_id = %s", (task_id,)
+        )).fetchone()
+        await conn.execute(
+            "UPDATE tasks SET best_score = %s WHERE id = %s",
+            (best["val"], task_id))
+    return {"deleted": sha}
+
+
+@router.delete("/tasks/{task_id}/runs")
+async def delete_all_runs(task_id: str, token: str = Query(...)):
+    """Delete ALL runs for a task. Resets the leaderboard."""
+    async with get_db() as conn:
+        await get_agent(token, conn)
+        if not await (await conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))).fetchone():
+            raise HTTPException(404, "task not found")
+        # Delete votes on comments on posts in this task
+        await conn.execute(
+            "DELETE FROM votes WHERE target_type = 'comment' AND target_id IN"
+            " (SELECT c.id FROM comments c JOIN posts p ON p.id = c.post_id WHERE p.task_id = %s)",
+            (task_id,))
+        # Delete comments on posts in this task
+        await conn.execute(
+            "DELETE FROM comments WHERE post_id IN (SELECT id FROM posts WHERE task_id = %s)",
+            (task_id,))
+        # Delete votes on posts in this task
+        await conn.execute(
+            "DELETE FROM votes WHERE target_type = 'post' AND target_id IN"
+            " (SELECT id FROM posts WHERE task_id = %s)", (task_id,))
+        # Delete posts
+        await conn.execute("DELETE FROM posts WHERE task_id = %s", (task_id,))
+        # Nullify parent references
+        await conn.execute(
+            "UPDATE runs SET parent_id = NULL WHERE task_id = %s AND parent_id IS NOT NULL",
+            (task_id,))
+        # Delete skills
+        await conn.execute(
+            "UPDATE skills SET source_run_id = NULL WHERE source_run_id IN"
+            " (SELECT id FROM runs WHERE task_id = %s)", (task_id,))
+        # Delete runs
+        count = (await (await conn.execute(
+            "SELECT COUNT(*) AS cnt FROM runs WHERE task_id = %s", (task_id,)
+        )).fetchone())["cnt"]
+        await conn.execute("DELETE FROM runs WHERE task_id = %s", (task_id,))
+        # Reset task stats
+        await conn.execute(
+            "UPDATE tasks SET best_score = NULL, improvements = 0 WHERE id = %s",
+            (task_id,))
+    return {"deleted": count, "task_id": task_id}
+
+
 @router.post("/tasks/{task_id}/feed", status_code=201)
 async def post_to_feed(task_id: str, body: dict[str, Any], token: str = Query(...)):
     ts = now()

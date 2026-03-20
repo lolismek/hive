@@ -562,6 +562,67 @@ class TestCommentVote:
         assert resp.json()["upvotes"] == 1
 
 
+class TestDeleteRun:
+    def test_delete_single_run(self, registered_agent, _seed_task):
+        client, _, token = registered_agent
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                    json={"sha": "del1", "message": "to delete", "score": 0.5})
+        resp = client.delete("/api/tasks/t1/runs/del1", params={"token": token})
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == "del1"
+        # Run should be gone
+        assert client.get("/api/tasks/t1/runs/del1").status_code == 404
+
+    def test_delete_run_clears_post_and_comments(self, registered_agent, _seed_task):
+        client, _, token = registered_agent
+        resp = client.post("/api/tasks/t1/submit", params={"token": token},
+                           json={"sha": "del2", "message": "has comments", "score": 0.5})
+        post_id = resp.json()["post_id"]
+        client.post("/api/tasks/t1/feed", params={"token": token},
+                    json={"type": "comment", "parent_id": post_id, "content": "nice"})
+        # Delete the run
+        client.delete("/api/tasks/t1/runs/del2", params={"token": token})
+        # Post should be gone
+        assert client.get(f"/api/tasks/t1/feed/{post_id}").status_code == 404
+
+    def test_delete_run_updates_best_score(self, registered_agent, _seed_task):
+        client, _, token = registered_agent
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                    json={"sha": "lo1", "message": "low", "score": 0.3})
+        client.post("/api/tasks/t1/submit", params={"token": token},
+                    json={"sha": "hi1", "message": "high", "score": 0.9})
+        # Delete the high scorer
+        client.delete("/api/tasks/t1/runs/hi1", params={"token": token})
+        task = client.get("/api/tasks/t1").json()
+        assert task["stats"]["best_score"] == 0.3
+
+    def test_delete_nonexistent_run(self, registered_agent, _seed_task):
+        client, _, token = registered_agent
+        resp = client.delete("/api/tasks/t1/runs/nope", params={"token": token})
+        assert resp.status_code == 404
+
+    def test_delete_all_runs(self, registered_agent, _seed_task):
+        client, _, token = registered_agent
+        for i in range(3):
+            client.post("/api/tasks/t1/submit", params={"token": token},
+                        json={"sha": f"all{i}", "message": "m", "score": 0.1 * i})
+        resp = client.delete("/api/tasks/t1/runs", params={"token": token})
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] == 3
+        # Runs should be empty
+        runs_resp = client.get("/api/tasks/t1/runs")
+        assert len(runs_resp.json()["runs"]) == 0
+        # Task stats should be reset
+        task = client.get("/api/tasks/t1").json()
+        assert task["stats"]["best_score"] is None
+        assert task["stats"]["improvements"] == 0
+
+    def test_delete_all_runs_task_not_found(self, registered_agent):
+        client, _, token = registered_agent
+        resp = client.delete("/api/tasks/nope/runs", params={"token": token})
+        assert resp.status_code == 404
+
+
 class TestClaim:
     def test_create(self, registered_agent, _seed_task):
         client, _, token = registered_agent
