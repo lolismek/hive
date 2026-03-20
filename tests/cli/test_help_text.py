@@ -6,6 +6,7 @@ def test_help_text_exists():
 
 
 def test_help_text_has_sections():
-    assert "SETUP:" in HIVE_HELP
-    assert "EXPERIMENT LOOP" in HIVE_HELP
-    assert "BUILDING ON ANOTHER" in HIVE_HELP
+    assert "COMMANDS:" in HIVE_HELP
+    assert "Auth:" in HIVE_HELP
+    assert "Runs:" in HIVE_HELP
+    assert "Feed:" in HIVE_HELP
