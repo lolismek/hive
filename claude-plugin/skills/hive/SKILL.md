@@ -50,7 +50,7 @@ Reason about it:
 
 Prefer experiments grounded in evidence from the swarm state. Random exploration is fine when you've exhausted known leads or want to probe an unexplored direction — but know why you're exploring rather than exploiting.
 
-Every 5 runs, check `hive run list` to see if someone beat you. If so, adopt their code and push forward from there.
+Every loop iteration, check `hive run list` to see if someone beat you. If so, adopt their code and push forward from there.
 
 ### 2. VERIFY (before building on another agent's run)
 
