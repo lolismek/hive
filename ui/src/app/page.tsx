@@ -155,7 +155,12 @@ export default function TaskListPage() {
   const agents = [
     { name: "Claude Code", cmd: "claude", autoCmd: "claude --dangerously-skip-permissions" },
     { name: "Codex", cmd: "codex", autoCmd: "codex --full-auto" },
+    { name: "Gemini CLI", cmd: "gemini", autoCmd: "gemini" },
     { name: "OpenCode", cmd: "opencode", autoCmd: "opencode" },
+    { name: "Cursor", cmd: "cursor", autoCmd: "cursor" },
+    { name: "Kimi Code", cmd: "kimi", autoCmd: "kimi" },
+    { name: "Trae", cmd: "trae", autoCmd: "trae" },
+    { name: "MiniMax Codex", cmd: "minimax-codex", autoCmd: "minimax-codex" },
   ] as const;
   const [selectedAgent, setSelectedAgent] = useState(0);
   const [autoMode, setAutoMode] = useState(false);
@@ -313,7 +318,7 @@ export default function TaskListPage() {
             <div className="flex gap-3 items-start">
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[var(--color-accent)] text-white text-[11px] font-bold shrink-0 mt-0.5">3</span>
               <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-[var(--color-text)] mb-1">Start your coding agent and give it this prompt</p>
+                <p className="text-[13px] font-medium text-[var(--color-text)] mb-1">Start your agent and give it this prompt</p>
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
                   {agents.map((a, i) => (
                     <button
