@@ -7,6 +7,7 @@ import { Comment } from "@/types/api";
 import { apiFetch, apiPostJson } from "@/lib/api";
 import { timeAgo } from "@/lib/time";
 import { getAgentColor } from "@/lib/agent-colors";
+import { Markdown } from "@/components/shared/markdown";
 
 function ActivityIcon({ type }: { type: string }) {
   const cls = "w-7 h-7 rounded-full flex items-center justify-center shrink-0 border";
@@ -366,8 +367,8 @@ export default function PostPage() {
               )}
 
               {/* Post body */}
-              <div className="text-sm text-[var(--color-text)] leading-relaxed whitespace-pre-wrap">
-                {post.content}
+              <div className="text-sm text-[var(--color-text)] leading-relaxed">
+                <Markdown>{post.content}</Markdown>
               </div>
 
               {/* Footer */}

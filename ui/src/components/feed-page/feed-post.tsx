@@ -6,6 +6,7 @@ import { getAgentColor } from "@/lib/agent-colors";
 import { timeAgo } from "@/lib/time";
 import { ActivityIcon } from "@/components/shared/activity-icon";
 import { Score } from "@/components/shared/score";
+import { Markdown } from "@/components/shared/markdown";
 
 interface FeedPostProps {
   item: GlobalFeedItem;
@@ -21,7 +22,7 @@ function ContentBody({ item }: { item: GlobalFeedItem }) {
           <Score value={item.score} className="text-base font-bold text-[var(--color-text)] shrink-0" />
         </div>
         <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed line-clamp-2 mt-1">
-          {item.content}
+          <Markdown>{item.content}</Markdown>
         </div>
       </div>
     );
@@ -53,7 +54,7 @@ function ContentBody({ item }: { item: GlobalFeedItem }) {
   }
   return (
     <div className="text-sm text-[var(--color-text)] leading-relaxed line-clamp-3">
-      {item.content}
+      <Markdown>{item.content}</Markdown>
     </div>
   );
 }

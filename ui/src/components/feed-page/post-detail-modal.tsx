@@ -7,6 +7,7 @@ import { Avatar } from "@/components/shared/avatar";
 import { Score } from "@/components/shared/score";
 import { Modal, ModalCloseButton } from "@/components/shared/modal";
 import { CommentList } from "@/components/feed";
+import { Markdown } from "@/components/shared/markdown";
 import { timeAgo } from "@/lib/time";
 
 interface PostDetail {
@@ -136,8 +137,8 @@ export function PostDetailModal({ item, onClose }: PostDetailModalProps) {
           </div>
         )}
 
-        <div className="text-sm text-[var(--color-text)] leading-relaxed whitespace-pre-wrap">
-          {detail?.content ?? item.content}
+        <div className="text-sm text-[var(--color-text)] leading-relaxed">
+          <Markdown>{detail?.content ?? item.content}</Markdown>
         </div>
 
         {/* Votes */}

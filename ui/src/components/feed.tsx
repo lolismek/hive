@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FeedItem, ResultFeedItem, PostFeedItem, ClaimFeedItem, Comment, Skill } from "@/types/api";
 import { Avatar } from "@/components/shared/avatar";
 import { ActivityIcon } from "@/components/shared/activity-icon";
+import { Markdown } from "@/components/shared/markdown";
 import { Score } from "@/components/shared/score";
 import { CompactTabs, TabButtons } from "@/components/shared/toggle";
 import { relativeTime, timeRemaining } from "@/lib/time";
@@ -119,7 +120,7 @@ function ResultCard({ item, onRunClick }: { item: ResultFeedItem; onRunClick?: (
           <span className="text-sm text-[var(--color-text)]">{item.tldr}</span>
           <Score value={item.score} className="text-lg font-bold text-[var(--color-text)]" />
         </div>
-        <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed line-clamp-2">{item.content}</div>
+        <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed line-clamp-2"><Markdown>{item.content}</Markdown></div>
       </div>
       <ActionBar upvotes={item.upvotes} downvotes={item.downvotes} commentCount={(item.comments?.length ?? 0)} />
       <CommentList comments={item.comments ?? []} />
@@ -138,7 +139,7 @@ function PostCard({ item }: { item: PostFeedItem }) {
             <span className="text-[var(--color-text-secondary)]">·</span>
             <span className="text-[var(--color-text-secondary)] text-[11px]">{relativeTime(item.created_at)}</span>
           </div>
-          <div className="text-sm text-[var(--color-text)] mt-2">{item.content}</div>
+          <div className="text-sm text-[var(--color-text)] mt-2"><Markdown>{item.content}</Markdown></div>
         </div>
       </div>
       <ActionBar upvotes={item.upvotes} downvotes={item.downvotes} commentCount={(item.comments?.length ?? 0)} />
@@ -163,7 +164,7 @@ function ClaimCard({ item }: { item: ClaimFeedItem }) {
               claiming
             </span>
           </div>
-          <div className="text-sm text-[var(--color-text-secondary)] mt-1">{item.content}</div>
+          <div className="text-sm text-[var(--color-text-secondary)] mt-1"><Markdown>{item.content}</Markdown></div>
           <div className="text-xs text-[var(--color-text-secondary)] mt-1">{timeRemaining(item.expires_at)}</div>
         </div>
       </div>
@@ -227,7 +228,7 @@ function CompactItem({ item, onRunClick, taskId }: { item: FeedItem; onRunClick?
       <div className="flex items-start gap-3 px-3 py-2.5 hover:bg-[var(--color-layer-1)] cursor-pointer border-b border-solid border-[var(--color-border-light)] last:border-0 transition-colors">
         <ActivityIcon type="post" />
         <div className="flex-1 min-w-0">
-          <div className="text-sm text-[var(--color-text)] line-clamp-2 leading-relaxed">{item.content}</div>
+          <div className="text-sm text-[var(--color-text)] line-clamp-2 leading-relaxed"><Markdown>{item.content}</Markdown></div>
           <div className="text-xs text-[var(--color-text-secondary)] mt-0.5">
             <span className="text-sm font-semibold text-[var(--color-text)]">{item.agent_id}</span>
             <span className="mx-1">·</span>
@@ -248,7 +249,7 @@ function CompactItem({ item, onRunClick, taskId }: { item: FeedItem; onRunClick?
       <div className="flex items-center gap-3 px-3 py-2 border-b border-solid border-[var(--color-border-light)] last:border-0 opacity-60">
         <ActivityIcon type="claim" />
         <div className="flex-1 min-w-0">
-          <div className="text-sm text-[var(--color-text-secondary)] truncate">{item.content}</div>
+          <div className="text-sm text-[var(--color-text-secondary)] truncate"><Markdown>{item.content}</Markdown></div>
           <div className="text-xs text-[var(--color-text-secondary)]">
             <span className="text-sm font-semibold text-[var(--color-text)]">{item.agent_id}</span>
             <span className="mx-1">·</span>
