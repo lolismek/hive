@@ -11,6 +11,12 @@ from fastapi import APIRouter, FastAPI, File, Form, Header, HTTPException, Query
 
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 from fastapi.middleware.cors import CORSMiddleware
+
+
+def require_admin(x_admin_key: str):
+    """Validate admin key. Raises 403 if invalid."""
+    if not ADMIN_KEY or x_admin_key != ADMIN_KEY:
+        raise HTTPException(403, "invalid admin key")
 from fastapi.responses import JSONResponse as _BaseJSONResponse
 
 from .db import init_pool, close_pool, get_db, get_db_sync, now, paginate
@@ -145,23 +151,26 @@ def _validate_task_id(task_id: str):
         raise HTTPException(400, "task id must not contain consecutive hyphens (reserved as delimiter)")
 
 
-@router.post("/tasks", status_code=503)
-async def create_task():
-    return JSONResponse({"detail": "Task creation is coming soon."}, status_code=503)
-
-# TODO: re-enable task creation
-# @router.post("/tasks", status_code=201)
-# async def create_task(
-#     archive: UploadFile = File(...),
-#     id: str = Form(...),
-#     name: str = Form(...),
-#     description: str = Form(...),
-#     config: str | None = Form(None),
-# ):
-#     _validate_task_id(id)
-#     gh = get_github_app()
-#     repo_url = await asyncio.to_thread(gh.create_task_repo, id, archive.file.read(), description)
-#     return JSONResponse({"id": id, "name": name, "repo_url": repo_url, "status": "draft"}, status_code=201)
+@router.post("/tasks", status_code=201)
+async def create_task(
+    archive: UploadFile = File(...),
+    id: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(...),
+    config: str | None = Form(None),
+    x_admin_key: str = Header(...),
+):
+    require_admin(x_admin_key)
+    _validate_task_id(id)
+    try:
+        gh = get_github_app()
+    except Exception as e:
+        raise HTTPException(503, f"GitHub App not configured: {e}")
+    try:
+        repo_url = await asyncio.to_thread(gh.create_task_repo, id, archive.file.read(), description)
+    except Exception as e:
+        raise HTTPException(502, f"Failed to create GitHub repo: {e}")
+    return JSONResponse({"id": id, "name": name, "repo_url": repo_url, "status": "draft"}, status_code=201)
 
 
 @router.patch("/tasks/{task_id}")
@@ -181,7 +190,8 @@ async def update_task(task_id: str, body: dict[str, Any], token: str = Query(...
 
 
 @router.post("/tasks/sync")
-async def sync_tasks():
+async def sync_tasks(x_admin_key: str = Header(...)):
+    require_admin(x_admin_key)
     await asyncio.to_thread(_sync_tasks_from_github)
     return {"status": "ok"}
 
@@ -451,8 +461,7 @@ async def get_run(task_id: str, sha: str):
 @router.patch("/tasks/{task_id}/runs/{sha}")
 async def patch_run(task_id: str, sha: str, body: dict[str, Any],
                     x_admin_key: str = Header(...)):
-    if not ADMIN_KEY or x_admin_key != ADMIN_KEY:
-        raise HTTPException(403, "invalid admin key")
+    require_admin(x_admin_key)
     async with get_db() as conn:
         row = await (await conn.execute(
             "SELECT id FROM runs WHERE id = %s AND task_id = %s", (sha, task_id)
@@ -477,10 +486,10 @@ async def patch_run(task_id: str, sha: str, body: dict[str, Any],
 
 
 @router.delete("/tasks/{task_id}/runs/{sha}")
-async def delete_run(task_id: str, sha: str, token: str = Query(...)):
+async def delete_run(task_id: str, sha: str, x_admin_key: str = Header(...)):
     """Delete a single run and its associated post, comments, and votes."""
+    require_admin(x_admin_key)
     async with get_db() as conn:
-        await get_agent(token, conn)
         row = await (await conn.execute(
             "SELECT id FROM runs WHERE id = %s AND task_id = %s", (sha, task_id)
         )).fetchone()
@@ -520,10 +529,10 @@ async def delete_run(task_id: str, sha: str, token: str = Query(...)):
 
 
 @router.delete("/tasks/{task_id}/runs")
-async def delete_all_runs(task_id: str, token: str = Query(...)):
+async def delete_all_runs(task_id: str, x_admin_key: str = Header(...)):
     """Delete ALL runs for a task. Resets the leaderboard."""
+    require_admin(x_admin_key)
     async with get_db() as conn:
-        await get_agent(token, conn)
         if not await (await conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))).fetchone():
             raise HTTPException(404, "task not found")
         # Delete votes on comments on posts in this task
