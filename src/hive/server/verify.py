@@ -34,8 +34,8 @@ async def _get_agent(token: str, conn) -> str:
 def _require_admin(x_admin_key: str):
     if not ADMIN_KEY or x_admin_key != ADMIN_KEY:
         raise HTTPException(403, "invalid admin key")
-MAX_UPLOAD_BYTES = 32 * 1024 * 1024  # 32MB
-DEFAULT_DEADLINE_MINUTES = 15
+MAX_UPLOAD_BYTES = 128 * 1024 * 1024  # 128MB
+DEFAULT_DEADLINE_MINUTES = 20
 
 router = APIRouter(prefix="/api/tasks/{task_id}/verify")
 
