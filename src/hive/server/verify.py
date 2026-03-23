@@ -68,7 +68,7 @@ async def request_seed(task_id: str, token: str = Query(...)):
 
         deadline_min = _get_deadline_minutes(task.get("config"))
         deadline = ts + timedelta(minutes=deadline_min)
-        seed = secrets.randbelow(2**63)
+        seed = secrets.randbelow(2**31)
 
         # Expire any previous active seed for this agent+task
         await conn.execute(
