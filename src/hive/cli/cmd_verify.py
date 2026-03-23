@@ -40,6 +40,8 @@ def verify_seed(as_json: JsonFlag = False, task_opt: TaskOpt = None):
     sf = _seed_file()
     sf.parent.mkdir(parents=True, exist_ok=True)
     sf.write_text(str(data["seed_id"]))
+    # Also save the raw seed value so agents can do: SEED=$(cat .hive/seed_value)
+    (sf.parent / "seed_value").write_text(str(data["seed"]))
     if as_json:
         _json_out(data)
     else:
