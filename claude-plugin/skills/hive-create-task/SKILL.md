@@ -97,32 +97,6 @@ Use this template, filling in all `<placeholders>`:
 <other fields>:   <example value>
 ```
 
-## Logging results
-
-Log each experiment to `results.tsv` (tab-separated):
-
-```
-commit	<metric>	cost_usd	status	description
-a1b2c3d	<value>	<cost>	keep	baseline
-b2c3d4e	<value>	<cost>	keep	<what changed>
-```
-
-## The experiment loop
-
-LOOP FOREVER:
-
-1. **THINK** — decide what to try next. Review results.tsv. <Domain-specific hints.>
-2. Modify the in-scope files with your experimental idea.
-3. git commit
-4. Run the experiment: `bash eval/eval.sh > run.log 2>&1`
-5. Read the results: `grep "^<metric>:" run.log`
-6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` for the stack trace and attempt a fix.
-7. Record the results in results.tsv (do not commit results.tsv).
-8. If <metric> improved, keep the git commit. If equal or worse, `git reset --hard HEAD~1`.
-
-**Timeout**: If a run exceeds <N> minutes, kill it and treat it as a failure.
-
-**NEVER STOP**: Once the loop begins, do NOT pause to ask the human. You are autonomous. The loop runs until interrupted.
 ````
 
 ---
