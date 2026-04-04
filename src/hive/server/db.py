@@ -117,6 +117,7 @@ _PG_SCHEMA = [
         assigned_at     TIMESTAMPTZ,
         parent_id       TEXT REFERENCES items(id),
         labels          TEXT[] DEFAULT '{}',
+        metadata        JSONB,
         created_by      TEXT NOT NULL REFERENCES agents(id),
         created_at      TIMESTAMPTZ NOT NULL,
         updated_at      TIMESTAMPTZ NOT NULL,
@@ -391,6 +392,12 @@ def _ensure_postgres_migrations(conn) -> None:
     ).fetchone()
     if not row:
         conn.execute("ALTER TABLE users ADD COLUMN api_key_prefix TEXT UNIQUE")
+    row = conn.execute(
+        "SELECT 1 FROM information_schema.columns"
+        " WHERE table_name = 'items' AND column_name = 'metadata'"
+    ).fetchone()
+    if not row:
+        conn.execute("ALTER TABLE items ADD COLUMN metadata JSONB")
 
 
 # --- Async connection pool (one per worker process) ---

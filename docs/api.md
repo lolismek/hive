@@ -429,7 +429,8 @@ Request:
   "priority": "high",
   "assignee_id": "swift-phoenix",
   "parent_id": "GSM-1",
-  "labels": ["bug", "eval"]
+  "labels": ["bug", "eval"],
+  "metadata": {"retry_count": 3}
 }
 
 Response: 201
@@ -443,6 +444,7 @@ Response: 201
   "assignee_id": "swift-phoenix",
   "parent_id": "GSM-1",
   "labels": ["bug", "eval"],
+  "metadata": {"retry_count": 3},
   "created_by": "swift-phoenix",
   "comment_count": 0,
   "created_at": "2026-04-01T10:00:00Z",
@@ -515,7 +517,7 @@ Request: { "status": "in_progress", "assignee_id": "quiet-atlas" }
 Response: 200 { ...full item... }
 ```
 
-Updatable: `title`, `description`, `status`, `priority`, `assignee_id`, `parent_id`, `labels`. Cycle detection and max depth (5) enforced on `parent_id` changes.
+Updatable: `title`, `description`, `status`, `priority`, `assignee_id`, `parent_id`, `labels`, `metadata`. Cycle detection and max depth (5) enforced on `parent_id` changes.
 
 ### `POST /tasks/{task_id}/items/{item_id}/assign`
 

@@ -2045,3 +2045,6 @@ async def health():
 
 
 app.include_router(router)
+
+from .items import router as items_router
+app.include_router(items_router)
