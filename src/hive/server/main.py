@@ -159,56 +159,98 @@ def _decode_jwt(token: str) -> dict:
 async def require_user(authorization: str = Header(...)) -> dict:
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "expected Bearer token")
-    return _decode_jwt(authorization.removeprefix("Bearer ").strip())
+    token = authorization.removeprefix("Bearer ").strip()
+    # API key: resolve to user dict
+    if token.startswith("hive_"):
+        user_id = await _resolve_api_key(token)
+        if not user_id:
+            raise HTTPException(401, "invalid API key")
+        async with get_db() as conn:
+            row = await (await conn.execute("SELECT id, email, role FROM users WHERE id = %s", (user_id,))).fetchone()
+            if not row:
+                raise HTTPException(401, "user not found")
+            return {"sub": str(row["id"]), "email": row["email"], "role": row["role"]}
+    return _decode_jwt(token)
 
 
-def require_admin(x_admin_key: str = "", authorization: str = ""):
-    """Validate admin access via static key or JWT admin role."""
+async def require_admin(x_admin_key: str = "", authorization: str = ""):
+    """Validate admin access via static key, JWT admin role, or API key of admin user."""
     # Try static admin key first
     if ADMIN_KEY and x_admin_key == ADMIN_KEY:
         return
     # Try JWT
     if authorization.startswith("Bearer "):
-        try:
-            payload = _decode_jwt(authorization.removeprefix("Bearer ").strip())
-            if payload.get("role") == "admin":
-                return
-        except HTTPException:
-            pass
+        token = authorization.removeprefix("Bearer ").strip()
+        # API key of admin user
+        if token.startswith("hive_"):
+            user_id = await _resolve_api_key(token)
+            if user_id:
+                async with get_db() as conn:
+                    row = await (await conn.execute("SELECT role FROM users WHERE id = %s", (user_id,))).fetchone()
+                    if row and row["role"] == "admin":
+                        return
+        else:
+            try:
+                payload = _decode_jwt(token)
+                if payload.get("role") == "admin":
+                    return
+            except HTTPException:
+                pass
     raise HTTPException(403, "admin access required")
 
 
-def _get_user_id_from_auth(authorization: str = "") -> int | None:
-    """Extract user_id from JWT, or None if not authenticated."""
-    if authorization.startswith("Bearer "):
-        try:
-            payload = _decode_jwt(authorization.removeprefix("Bearer ").strip())
-            return int(payload["sub"])
-        except (HTTPException, KeyError, ValueError):
-            pass
-    return None
+async def _get_user_id_from_auth(authorization: str = "") -> int | None:
+    """Extract user_id from JWT or API key, or None if not authenticated."""
+    if not authorization.startswith("Bearer "):
+        return None
+    token = authorization.removeprefix("Bearer ").strip()
+    if token.startswith("hive_"):
+        return await _resolve_api_key(token)
+    try:
+        payload = _decode_jwt(token)
+        return int(payload["sub"])
+    except (HTTPException, KeyError, ValueError):
+        return None
+
+
+def _generate_api_key() -> tuple[str, str, str]:
+    """Generate API key. Returns (raw_key, prefix, bcrypt_hash)."""
+    raw = f"hive_{uuid.uuid4()}"
+    prefix = raw[:12]  # e.g. "hive_e715e163"
+    hashed = bcrypt.hashpw(raw.encode(), bcrypt.gensalt()).decode()
+    return raw, prefix, hashed
+
+
+async def _resolve_api_key(api_key: str) -> int | None:
+    """Look up user_id by API key prefix, then verify with bcrypt."""
+    if not api_key or not api_key.startswith("hive_"):
+        return None
+    prefix = api_key[:12]
+    async with get_db() as conn:
+        row = await (await conn.execute(
+            "SELECT id, api_key FROM users WHERE api_key_prefix = %s", (prefix,)
+        )).fetchone()
+        if not row or not row["api_key"]:
+            return None
+        if bcrypt.checkpw(api_key.encode(), row["api_key"].encode()):
+            return row["id"]
+        return None
 
 
 async def require_admin_or_task_owner(task_id: str, x_admin_key: str = "", authorization: str = ""):
     """Allow admin access OR task owner access."""
-    # Admin check (static key or admin role)
     if ADMIN_KEY and x_admin_key == ADMIN_KEY:
         return
-    user_id = _get_user_id_from_auth(authorization)
-    if authorization.startswith("Bearer "):
-        try:
-            payload = _decode_jwt(authorization.removeprefix("Bearer ").strip())
-            if payload.get("role") == "admin":
-                return
-        except HTTPException:
-            pass
-    # Task owner check
+    user_id = await _get_user_id_from_auth(authorization)
     if user_id:
+        # Check admin role
         async with get_db() as conn:
-            row = await (await conn.execute(
-                "SELECT owner_id FROM tasks WHERE id = %s", (task_id,)
-            )).fetchone()
-            if row and row["owner_id"] == user_id:
+            user_row = await (await conn.execute("SELECT role FROM users WHERE id = %s", (user_id,))).fetchone()
+            if user_row and user_row["role"] == "admin":
+                return
+            # Check task owner
+            task_row = await (await conn.execute("SELECT owner_id FROM tasks WHERE id = %s", (task_id,))).fetchone()
+            if task_row and task_row["owner_id"] == user_id:
                 return
     raise HTTPException(403, "admin or task owner access required")
 
@@ -226,17 +268,14 @@ async def require_task_access(task_id: str, authorization: str = "", x_admin_key
         # Admin static key
         if ADMIN_KEY and x_admin_key == ADMIN_KEY:
             return
-        # JWT: admin role or owner match
-        user_id = _get_user_id_from_auth(authorization)
+        # JWT or API key → user_id
+        user_id = await _get_user_id_from_auth(authorization)
         if user_id:
             if user_id == row["owner_id"]:
                 return
-            try:
-                payload = _decode_jwt(authorization.removeprefix("Bearer ").strip())
-                if payload.get("role") == "admin":
-                    return
-            except HTTPException:
-                pass
+            user_row = await (await conn.execute("SELECT role FROM users WHERE id = %s", (user_id,))).fetchone()
+            if user_row and user_row["role"] == "admin":
+                return
         # Future: check task_permissions table
         raise HTTPException(404, "task not found")
 
@@ -512,6 +551,27 @@ async def auth_me(user: dict = Depends(require_user)):
     }
 
 
+@router.get("/auth/api-key")
+async def get_api_key(user: dict = Depends(require_user)):
+    """Return the user's API key prefix (full key is never retrievable after creation)."""
+    user_id = int(user["sub"])
+    async with get_db() as conn:
+        row = await (await conn.execute("SELECT api_key_prefix FROM users WHERE id = %s", (user_id,))).fetchone()
+        if not row:
+            raise HTTPException(404, "user not found")
+    return {"api_key_prefix": row["api_key_prefix"]}
+
+
+@router.post("/auth/api-key/regenerate")
+async def regenerate_api_key(user: dict = Depends(require_user)):
+    """Generate a new API key, invalidating the old one. Returns the raw key once."""
+    user_id = int(user["sub"])
+    raw_key, key_prefix, key_hash = _generate_api_key()
+    async with get_db() as conn:
+        await conn.execute("UPDATE users SET api_key = %s, api_key_prefix = %s WHERE id = %s", (key_hash, key_prefix, user_id))
+    return {"api_key": raw_key}
+
+
 @router.post("/auth/claim")
 async def auth_claim(body: dict[str, Any], user: dict = Depends(require_user)):
     agent_token = body.get("token", "").strip()
@@ -716,6 +776,11 @@ async def auth_github_repos(user: dict = Depends(require_user), page: int = 1, p
     return {"repos": result["repos"], "installed": result["installed"], "page": page}
 
 
+def _resolve_agent_token(token: str = "", x_agent_token: str = "") -> str:
+    """Get agent token from query param or header."""
+    return x_agent_token or token
+
+
 async def get_agent(token: str, conn) -> str:
     # Try real token first, fall back to legacy id-as-token
     row = await (await conn.execute("SELECT id FROM agents WHERE token = %s", (token,))).fetchone()
@@ -816,7 +881,7 @@ async def create_task(
     config: str | None = Form(None),
     x_admin_key: str = Header(""), authorization: str = Header(""),
 ):
-    require_admin(x_admin_key, authorization)
+    await require_admin(x_admin_key, authorization)
     _validate_task_id(id)
     _validate_task_description(description)
     async with get_db() as conn:
@@ -915,7 +980,7 @@ async def create_private_task(body: dict[str, Any], user: dict = Depends(require
 
 
 @router.patch("/tasks/{task_id}")
-async def update_task(task_id: str, body: dict[str, Any], token: str = Query(...),
+async def update_task(task_id: str, body: dict[str, Any], token: str = Query(""), x_agent_token: str = Header(""),
                       x_admin_key: str = Header(""), authorization: str = Header("")):
     await require_admin_or_task_owner(task_id, x_admin_key, authorization)
     allowed = {"name", "description", "config"}
@@ -931,7 +996,7 @@ async def update_task(task_id: str, body: dict[str, Any], token: str = Query(...
 
 @router.post("/tasks/sync")
 async def sync_tasks(x_admin_key: str = Header(""), authorization: str = Header("")):
-    require_admin(x_admin_key, authorization)
+    await require_admin(x_admin_key, authorization)
     await asyncio.to_thread(_sync_tasks_from_github)
     return {"status": "ok"}
 
@@ -1003,11 +1068,11 @@ async def get_task(task_id: str, authorization: str = Header("")):
 
 
 @router.post("/tasks/{task_id}/clone", status_code=201)
-async def clone_task(task_id: str, token: str = Query(...), authorization: str = Header("")):
+async def clone_task(task_id: str, token: str = Query(""), x_agent_token: str = Header(""), authorization: str = Header("")):
     await require_task_access(task_id, authorization)
     # Phase 1: read from DB
     async with get_db() as conn:
-        agent_id = await get_agent(token, conn)
+        agent_id = await get_agent(_resolve_agent_token(token, x_agent_token), conn)
         task = await (await conn.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))).fetchone()
         if not task: raise HTTPException(404, "task not found")
         repo_url = task["repo_url"]
@@ -1042,11 +1107,11 @@ async def clone_task(task_id: str, token: str = Query(...), authorization: str =
 
 
 @router.post("/tasks/{task_id}/submit", status_code=201)
-async def submit_run(task_id: str, body: dict[str, Any], token: str = Query(...), authorization: str = Header("")):
+async def submit_run(task_id: str, body: dict[str, Any], token: str = Query(""), x_agent_token: str = Header(""), authorization: str = Header("")):
     await require_task_access(task_id, authorization)
     ts = now()
     async with get_db() as conn:
-        agent_id = await get_agent(token, conn)
+        agent_id = await get_agent(_resolve_agent_token(token, x_agent_token), conn)
         if not await (await conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))).fetchone():
             raise HTTPException(404, "task not found")
         score = body.get("score")
@@ -1403,11 +1468,11 @@ async def delete_task(
 
 
 @router.post("/tasks/{task_id}/feed", status_code=201)
-async def post_to_feed(task_id: str, body: dict[str, Any], token: str = Query(...), authorization: str = Header("")):
+async def post_to_feed(task_id: str, body: dict[str, Any], token: str = Query(""), x_agent_token: str = Header(""), authorization: str = Header("")):
     await require_task_access(task_id, authorization)
     ts = now()
     async with get_db() as conn:
-        agent_id = await get_agent(token, conn)
+        agent_id = await get_agent(_resolve_agent_token(token, x_agent_token), conn)
         kind = body.get("type")
         if kind == "post":
             run_id = body.get("run_id")
@@ -1561,12 +1626,12 @@ async def get_post(task_id: str, post_id: int, authorization: str = Header(""), 
 
 
 @router.post("/tasks/{task_id}/feed/{post_id}/vote")
-async def vote(task_id: str, post_id: int, body: dict[str, Any], token: str = Query(...), authorization: str = Header("")):
+async def vote(task_id: str, post_id: int, body: dict[str, Any], token: str = Query(""), x_agent_token: str = Header(""), authorization: str = Header("")):
     await require_task_access(task_id, authorization)
     vote_type = body.get("type")
     if vote_type not in ("up", "down"): raise HTTPException(400, "type must be 'up' or 'down'")
     async with get_db() as conn:
-        agent_id = await get_agent(token, conn)
+        agent_id = await get_agent(_resolve_agent_token(token, x_agent_token), conn)
         if not await (await conn.execute("SELECT 1 FROM posts WHERE id = %s AND task_id = %s", (post_id, task_id))).fetchone():
             raise HTTPException(404, "post not found")
         await conn.execute(
@@ -1580,12 +1645,12 @@ async def vote(task_id: str, post_id: int, body: dict[str, Any], token: str = Qu
 
 
 @router.post("/tasks/{task_id}/comments/{comment_id}/vote")
-async def vote_comment(task_id: str, comment_id: int, body: dict[str, Any], token: str = Query(...), authorization: str = Header("")):
+async def vote_comment(task_id: str, comment_id: int, body: dict[str, Any], token: str = Query(""), x_agent_token: str = Header(""), authorization: str = Header("")):
     await require_task_access(task_id, authorization)
     vote_type = body.get("type")
     if vote_type not in ("up", "down"): raise HTTPException(400, "type must be 'up' or 'down'")
     async with get_db() as conn:
-        agent_id = await get_agent(token, conn)
+        agent_id = await get_agent(_resolve_agent_token(token, x_agent_token), conn)
         row = await (await conn.execute(
             "SELECT c.id FROM comments c JOIN posts p ON p.id = c.post_id"
             " WHERE c.id = %s AND p.task_id = %s",
@@ -1604,12 +1669,12 @@ async def vote_comment(task_id: str, comment_id: int, body: dict[str, Any], toke
 
 
 @router.post("/tasks/{task_id}/claim", status_code=201)
-async def create_claim(task_id: str, body: dict[str, Any], token: str = Query(...), authorization: str = Header("")):
+async def create_claim(task_id: str, body: dict[str, Any], token: str = Query(""), x_agent_token: str = Header(""), authorization: str = Header("")):
     await require_task_access(task_id, authorization)
     ts = now()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
     async with get_db() as conn:
-        agent_id = await get_agent(token, conn)
+        agent_id = await get_agent(_resolve_agent_token(token, x_agent_token), conn)
         if not await (await conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))).fetchone():
             raise HTTPException(404, "task not found")
         await conn.execute("DELETE FROM claims WHERE task_id = %s AND expires_at <= %s", (task_id, ts))
@@ -1821,11 +1886,11 @@ async def search(task_id: str, authorization: str = Header(""), q: str | None = 
 
 
 @router.post("/tasks/{task_id}/skills", status_code=201)
-async def add_skill(task_id: str, body: dict[str, Any], token: str = Query(...), authorization: str = Header("")):
+async def add_skill(task_id: str, body: dict[str, Any], token: str = Query(""), x_agent_token: str = Header(""), authorization: str = Header("")):
     await require_task_access(task_id, authorization)
     ts = now()
     async with get_db() as conn:
-        agent_id = await get_agent(token, conn)
+        agent_id = await get_agent(_resolve_agent_token(token, x_agent_token), conn)
         if not await (await conn.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))).fetchone():
             raise HTTPException(404, "task not found")
         source_run_id = body.get("source_run_id")

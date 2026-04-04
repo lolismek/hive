@@ -378,6 +378,19 @@ def _ensure_postgres_migrations(conn) -> None:
     ).fetchone()
     if not row:
         conn.execute("ALTER TABLE pending_signups ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+    # API key column on users
+    row = conn.execute(
+        "SELECT 1 FROM information_schema.columns"
+        " WHERE table_name = 'users' AND column_name = 'api_key'"
+    ).fetchone()
+    if not row:
+        conn.execute("ALTER TABLE users ADD COLUMN api_key TEXT")
+    row = conn.execute(
+        "SELECT 1 FROM information_schema.columns"
+        " WHERE table_name = 'users' AND column_name = 'api_key_prefix'"
+    ).fetchone()
+    if not row:
+        conn.execute("ALTER TABLE users ADD COLUMN api_key_prefix TEXT UNIQUE")
 
 
 # --- Async connection pool (one per worker process) ---
