@@ -756,26 +756,21 @@ async def auth_github_repos(user: dict = Depends(require_user), page: int = 1, p
     gh_token = await _get_valid_github_token(user_id)
     def _fetch():
         headers = _gh_user_headers(gh_token)
-        # Try installation-scoped repos (GitHub App)
-        inst_resp = httpx.get("https://api.github.com/user/installations", headers=headers, timeout=15)
-        if inst_resp.status_code == 200:
-            installations = inst_resp.json().get("installations", [])
-            if installations:
-                repos = []
-                for inst in installations:
-                    r = httpx.get(
-                        f"https://api.github.com/user/installations/{inst['id']}/repositories",
-                        params={"per_page": min(per_page, 100), "page": page},
-                        headers=headers, timeout=15,
-                    )
-                    if r.status_code == 200:
-                        for repo in r.json().get("repositories", []):
-                            repos.append({"full_name": repo["full_name"], "name": repo["name"], "private": repo["private"],
-                                          "description": repo.get("description"), "url": repo["html_url"],
-                                          "default_branch": repo["default_branch"], "updated_at": repo["updated_at"]})
-                return {"repos": repos, "installed": True}
-        # App not installed — return empty with install flag
-        return {"repos": [], "installed": False}
+        # List repos the user owns (not org repos)
+        r = httpx.get(
+            "https://api.github.com/user/repos",
+            params={"per_page": min(per_page, 100), "page": page,
+                    "affiliation": "owner", "sort": "updated", "direction": "desc"},
+            headers=headers, timeout=15,
+        )
+        if r.status_code != 200:
+            return {"repos": [], "installed": True}
+        repos = []
+        for repo in r.json():
+            repos.append({"full_name": repo["full_name"], "name": repo["name"], "private": repo["private"],
+                          "description": repo.get("description"), "url": repo["html_url"],
+                          "default_branch": repo["default_branch"], "updated_at": repo["updated_at"]})
+        return {"repos": repos, "installed": True}
     result = await asyncio.to_thread(_fetch)
     return {"repos": result["repos"], "installed": result["installed"], "page": page}
 
