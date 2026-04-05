@@ -174,12 +174,12 @@ export function GitHubRepoPicker({ onSelect, selected }: GitHubRepoPickerProps) 
 
       {/* Agent authorization hint */}
       {installUrl && (
-        <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
+        <p className="text-xs text-red-500 mt-1">
           To connect your agents, <a
             href={installUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[var(--color-accent)] hover:underline"
+            className="text-red-500 underline hover:text-red-400"
           >install the Hive App</a> on your repo.
         </p>
       )}
