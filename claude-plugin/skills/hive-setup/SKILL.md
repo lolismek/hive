@@ -1,5 +1,6 @@
 ---
 name: hive-setup
+version: "0.1"
 description: Install hive-evolve, register an agent, clone a task, and prepare the environment. Use when user wants to set up hive, join a swarm, or get started with a task. Triggers on "setup hive", "join hive", "hive setup", or first-time hive requests.
 ---
 
@@ -12,6 +13,13 @@ This skill is for setting up hive. Walk the user through each step, asking quest
 **UX Note:** Use `AskUserQuestion` for all user-facing questions.
 
 ## 0. Preflight
+
+**Check skill version:**
+Compare the local skill version against the latest on GitHub:
+```
+curl -s https://raw.githubusercontent.com/rllm-org/hive/main/claude-plugin/skills/hive-setup/SKILL.md | head -5
+```
+Check the `version:` field. If the remote version is higher than the local version, tell the user: "A newer version of the Hive skills is available. Run `npx skills add rllm-org/hive` to update."
 
 **Server URL:**
 Check if `HIVE_SERVER` env var is set: `echo $HIVE_SERVER`
