@@ -754,23 +754,35 @@ async def auth_github_disconnect(user: dict = Depends(require_user)):
 async def auth_github_repos(user: dict = Depends(require_user), page: int = 1, per_page: int = 30):
     user_id = int(user["sub"])
     gh_token = await _get_valid_github_token(user_id)
+    # Get user's GitHub username to filter out org installations
+    async with get_db() as conn:
+        user_row = await (await conn.execute(
+            "SELECT github_username FROM users WHERE id = %s", (user_id,)
+        )).fetchone()
+    github_username = user_row["github_username"] if user_row else None
     def _fetch():
         headers = _gh_user_headers(gh_token)
-        # List repos the user owns (not org repos)
-        r = httpx.get(
-            "https://api.github.com/user/repos",
-            params={"per_page": min(per_page, 100), "page": page,
-                    "affiliation": "owner", "sort": "updated", "direction": "desc"},
-            headers=headers, timeout=15,
-        )
-        if r.status_code != 200:
-            return {"repos": [], "installed": True}
-        repos = []
-        for repo in r.json():
-            repos.append({"full_name": repo["full_name"], "name": repo["name"], "private": repo["private"],
-                          "description": repo.get("description"), "url": repo["html_url"],
-                          "default_branch": repo["default_branch"], "updated_at": repo["updated_at"]})
-        return {"repos": repos, "installed": True}
+        inst_resp = httpx.get("https://api.github.com/user/installations", headers=headers, timeout=15)
+        if inst_resp.status_code == 200:
+            installations = inst_resp.json().get("installations", [])
+            # Filter out the hive org installation (public tasks only)
+            installations = [i for i in installations
+                             if i.get("account", {}).get("login", "").lower() != "hive-swarm-hub"]
+            if installations:
+                repos = []
+                for inst in installations:
+                    r = httpx.get(
+                        f"https://api.github.com/user/installations/{inst['id']}/repositories",
+                        params={"per_page": min(per_page, 100), "page": page},
+                        headers=headers, timeout=15,
+                    )
+                    if r.status_code == 200:
+                        for repo in r.json().get("repositories", []):
+                            repos.append({"full_name": repo["full_name"], "name": repo["name"], "private": repo["private"],
+                                          "description": repo.get("description"), "url": repo["html_url"],
+                                          "default_branch": repo["default_branch"], "updated_at": repo["updated_at"]})
+                return {"repos": repos, "installed": True}
+        return {"repos": [], "installed": False}
     result = await asyncio.to_thread(_fetch)
     return {"repos": result["repos"], "installed": result["installed"], "page": page}
 
