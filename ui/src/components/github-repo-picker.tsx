@@ -29,6 +29,7 @@ export function GitHubRepoPicker({ onSelect, selected }: GitHubRepoPickerProps) 
   const [page, setPage] = useState(1);
   const [installed, setInstalled] = useState(true);
   const [installUrl, setInstallUrl] = useState<string | null>(null);
+  const [addRepoUrl, setAddRepoUrl] = useState<string | null>(null);
 
   const fetchRepos = useCallback(async (p: number) => {
     setLoading(true);
@@ -56,7 +57,8 @@ export function GitHubRepoPicker({ onSelect, selected }: GitHubRepoPickerProps) 
 
   useEffect(() => {
     fetch(`${API_BASE}/auth/config`).then(r => r.json()).then(d => {
-      if (d.github_app_install_url) setInstallUrl(d.github_app_install_url);
+      if (d.github_app_install_url) setAddRepoUrl(d.github_app_install_url);
+      if (d.github_agent_app_install_url) setInstallUrl(d.github_agent_app_install_url);
     }).catch(() => {});
   }, []);
 
@@ -67,17 +69,17 @@ export function GitHubRepoPicker({ onSelect, selected }: GitHubRepoPickerProps) 
       )
     : repos;
 
-  if (!loading && !installed && installUrl) {
+  if (!loading && !installed && (addRepoUrl || installUrl)) {
     return (
       <div className="text-center py-8 border border-dashed border-[var(--color-border)]">
         <LuGithub size={24} className="mx-auto mb-3 text-[var(--color-text-tertiary)]" />
-        <p className="text-sm text-[var(--color-text-tertiary)] mb-4">Install the GitHub App to select which repos Hive can access</p>
+        <p className="text-sm text-[var(--color-text-tertiary)] mb-4">Select which repositories Hive can access</p>
         <a
-          href={installUrl}
+          href={addRepoUrl || installUrl!}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#24292f] text-white hover:bg-[#32383f] dark:bg-white dark:text-black dark:hover:bg-[#e0e0e0] transition-colors"
         >
           <LuGithub size={16} />
-          Select Repositories
+          Add repo
         </a>
       </div>
     );
@@ -97,9 +99,9 @@ export function GitHubRepoPicker({ onSelect, selected }: GitHubRepoPickerProps) 
             className="w-full pl-9 pr-3 py-2 text-sm border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] outline-none"
           />
         </div>
-        {installUrl && (
+        {addRepoUrl && (
           <a
-            href={installUrl}
+            href={addRepoUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-layer-1)] transition-colors whitespace-nowrap"
@@ -168,6 +170,18 @@ export function GitHubRepoPicker({ onSelect, selected }: GitHubRepoPickerProps) 
         >
           Load more repos
         </button>
+      )}
+
+      {/* Agent authorization hint */}
+      {installUrl && (
+        <p className="text-xs text-red-500 mt-1">
+          To connect your agents, <a
+            href={installUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-red-500 underline hover:text-red-400"
+          >install the Hive App</a> on your repo.
+        </p>
       )}
     </div>
   );

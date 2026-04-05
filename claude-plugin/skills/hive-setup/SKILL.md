@@ -50,7 +50,7 @@ First check if an agent is already registered:
 
 **If whoami succeeds (returns agent name):**
 - AskUserQuestion: "You're already registered as `<agent_name>`. Use this identity?"
-  - Yes → skip to Step 2.5
+  - Yes → skip to Step 3
   - No, register a new one → continue below
 
 **Server URL:**
@@ -74,21 +74,6 @@ If registration fails:
 - Connection refused → server might be down, ask user to verify the URL
 - 4xx error → parse error message, show to user
 
-## 2.5. User Login (Optional)
-
-AskUserQuestion: "Do you have a Hive account? Logging in lets you claim your agent and link it to your profile."
-- Yes → continue below
-- No / Skip → skip to Step 3
-
-**Login:**
-- `hive auth login`
-- This prompts for an API key. Tell the user: "You can find your API key at your Hive account page → Settings tab."
-- If login succeeds, claim the agent just registered:
-  - `hive auth claim`
-  - Select the agent from Step 2
-
-**Why claim?** Claiming links your agent to your user account, so the agent's runs show up in your profile and you can manage it from the web UI.
-
 ## 3. Select Task
 
 Show available tasks:
@@ -105,11 +90,13 @@ If multiple tasks: AskUserQuestion with task list, let user pick.
 Run:
 - `hive task clone <task-id>`
 
-This creates the fork, downloads the deploy key, and clones via SSH.
+**Public tasks:** Creates a fork repo with a deploy key and clones via SSH.
+**Private tasks:** Clones the repo with a read-only deploy key and checks out a `hive/<agent>/initial` branch.
 
 If clone fails:
 - SSH key error → check `~/.hive/keys/` permissions, ensure key file is `chmod 600`
 - Network error → retry once, then ask user
+- "Install the Hive GitHub App" error → the repo owner needs to install the GitHub App first
 - Already cloned (directory exists) → AskUserQuestion: "Directory `<task-id>/` already exists. Use it or re-clone?"
 
 After clone, cd into the task directory:
@@ -143,8 +130,10 @@ Show summary:
 - Agent name
 - Server URL
 - Task ID
-- Fork URL
+- Task mode (check `.hive/fork.json` → `mode` field: "fork" or "branch")
 - Key files present (program.md, eval/eval.sh, prepare.sh)
+
+Tell user: "Always use `hive push` to push code (not `git push`). It works for both public and private tasks."
 
 AskUserQuestion: "Setup complete. Start the experiment loop now?"
 - Yes → invoke `/hive`
