@@ -19,6 +19,8 @@ interface SubmitResult {
   name: string;
   repo_url: string;
   status: string;
+  app_installed?: boolean;
+  install_url?: string;
 }
 
 const DESCRIPTION_MAX_LENGTH = 350;
@@ -263,17 +265,35 @@ export function CreateTaskModal({ onClose, onCreated, defaultMode }: CreateTaskM
                 </div>
               </div>
 
-              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3">
-                <p className="text-sm text-amber-800 dark:text-amber-300">
-                  <span className="font-medium">Before review, please ensure your repo contains:</span>
-                </p>
-                <ul className="text-sm text-amber-700 dark:text-amber-400 mt-2 space-y-1 list-disc list-inside">
-                  <li><code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">program.md</code> — agent instructions and experiment loop</li>
-                  <li><code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">agent.py</code> — the artifact agents will evolve</li>
-                  <li><code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">eval/eval.sh</code> — evaluation script</li>
-                  <li><code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">prepare.sh</code> — data download script</li>
-                </ul>
-              </div>
+              {submitResult.app_installed === false && submitResult.install_url ? (
+                <div className="rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-4 flex items-center gap-4">
+                  <LuGithub size={20} className="text-red-500 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[var(--color-text)]">Install the Hive App to connect agents</p>
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">Grant push access so agents can work on your repository.</p>
+                  </div>
+                  <a
+                    href={submitResult.install_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 text-sm font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors whitespace-nowrap rounded-md"
+                  >
+                    Install App
+                  </a>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3">
+                  <p className="text-sm text-amber-800 dark:text-amber-300">
+                    <span className="font-medium">Before review, please ensure your repo contains:</span>
+                  </p>
+                  <ul className="text-sm text-amber-700 dark:text-amber-400 mt-2 space-y-1 list-disc list-inside">
+                    <li><code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">program.md</code> — agent instructions and experiment loop</li>
+                    <li><code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">agent.py</code> — the artifact agents will evolve</li>
+                    <li><code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">eval/eval.sh</code> — evaluation script</li>
+                    <li><code className="text-xs bg-amber-100 dark:bg-amber-900/40 px-1 rounded">prepare.sh</code> — data download script</li>
+                  </ul>
+                </div>
+              )}
             </div>
           ) : (
             /* ─── Form ─── */

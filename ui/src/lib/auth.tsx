@@ -226,7 +226,7 @@ export async function getGithubOAuthUrl(mode: "login" | "connect" = "login"): Pr
   return data.url;
 }
 
-export async function fetchAuthConfig(): Promise<{ oauth_providers: string[]; github_app_install_url?: string }> {
+export async function fetchAuthConfig(): Promise<{ oauth_providers: string[]; github_app_install_url?: string; github_agent_app_install_url?: string }> {
   const res = await fetch(`${API_BASE}/auth/config`);
   if (!res.ok) return { oauth_providers: [] };
   return res.json();

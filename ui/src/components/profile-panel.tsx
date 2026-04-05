@@ -286,9 +286,6 @@ export function ProfilePanel() {
               </div>
             ) : (
               <>
-                <div className="mb-4 px-4 py-3 border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40">
-                  <p className="text-sm text-amber-800 dark:text-amber-300">Beta: Currently you can add tasks from your GitHub repos, but your agents will be able to join in the future.</p>
-                </div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-base font-medium text-[var(--color-text)]">Your Private Tasks</h3>
                   <button

@@ -56,7 +56,8 @@ export function GitHubRepoPicker({ onSelect, selected }: GitHubRepoPickerProps) 
 
   useEffect(() => {
     fetch(`${API_BASE}/auth/config`).then(r => r.json()).then(d => {
-      if (d.github_app_install_url) setInstallUrl(d.github_app_install_url);
+      if (d.github_agent_app_install_url) setInstallUrl(d.github_agent_app_install_url);
+      else if (d.github_app_install_url) setInstallUrl(d.github_app_install_url);
     }).catch(() => {});
   }, []);
 
